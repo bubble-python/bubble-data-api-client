@@ -1,0 +1,4 @@
+# built python packages
+dist
+# local environment configuration for direnv
+.envrc
