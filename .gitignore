@@ -2,3 +2,9 @@
 dist
 # local environment configuration for direnv
 .envrc
+# coverage reports
+.coverage
+# local environment configuration
+.env
+# cache files
+__pycache__
