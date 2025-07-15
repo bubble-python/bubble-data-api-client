@@ -60,18 +60,26 @@ class Transport:
         self,
         method: str,
         url: str,
+        *,
+        params: dict[str, str] | None = None,
         json: typing.Any = None,
     ) -> httpx.Response:
         response: httpx.Response = await self._http.request(
             method=method,
             url=url,
+            params=params,
             json=json,
         )
         response.raise_for_status()
         return response
 
-    async def get(self, url: str) -> httpx.Response:
-        return await self.request(method="GET", url=url)
+    async def get(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        return await self.request(method="GET", url=url, params=params)
 
     async def patch(self, url: str, json: typing.Any) -> httpx.Response:
         return await self.request(method="PATCH", url=url, json=json)
