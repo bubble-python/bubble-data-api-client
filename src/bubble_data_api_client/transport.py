@@ -61,14 +61,16 @@ class Transport:
         method: str,
         url: str,
         *,
-        params: dict[str, str] | None = None,
+        content: str | None = None,
         json: typing.Any = None,
+        params: dict[str, str] | None = None,
     ) -> httpx.Response:
         response: httpx.Response = await self._http.request(
             method=method,
             url=url,
-            params=params,
+            content=content,
             json=json,
+            params=params,
         )
         response.raise_for_status()
         return response
@@ -92,3 +94,6 @@ class Transport:
 
     async def post(self, url: str, json: typing.Any) -> httpx.Response:
         return await self.request(method="POST", url=url, json=json)
+
+    async def post_text(self, url: str, content: str) -> httpx.Response:
+        return await self.request(method="POST", url=url, content=content)

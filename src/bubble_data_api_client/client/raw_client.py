@@ -1,7 +1,6 @@
 import json
 import types
 import typing
-from typing import TypedDict
 
 import httpx
 
@@ -9,7 +8,7 @@ from bubble_data_api_client.transport import Transport
 
 
 # all constraints are of the form:
-class BaseConstraint(TypedDict):
+class BaseConstraint(typing.TypedDict):
     key: str
     constraint_type: str
 
@@ -22,7 +21,7 @@ class Constraint(BaseConstraint, total=False):
 # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#sorting
 # in addition to 'sort_field' and 'descending', it is possible to have
 # multiple additional sort fields
-class AdditionalSortField(TypedDict):
+class AdditionalSortField(typing.TypedDict):
     sort_field: str
     descending: bool
 
@@ -105,8 +104,20 @@ class RawClient:
     async def create(self, typename: str, data: typing.Any) -> httpx.Response:
         return await self._transport.post(url=f"/{typename}", json=data)
 
+    async def bulk_create(self, typename: str, data: list[typing.Any]) -> httpx.Response:
+        return await self._transport.post_text(
+            url=f"/{typename}/bulk",
+            content="\n".join(json.dumps(item) for item in data),
+        )
+
     async def delete(self, typename: str, uid: str) -> httpx.Response:
         return await self._transport.delete(f"/{typename}/{uid}")
+
+    async def update(self, typename: str, uid: str, data: typing.Any) -> httpx.Response:
+        return await self._transport.patch(f"/{typename}/{uid}", json=data)
+
+    async def replace(self, typename: str, uid: str, data: typing.Any) -> httpx.Response:
+        return await self._transport.put(f"/{typename}/{uid}", json=data)
 
     # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#get-a-list-of-things
     async def list(
