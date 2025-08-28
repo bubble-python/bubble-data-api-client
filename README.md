@@ -1,6 +1,8 @@
 
 # bubble-data-api-client
 
+[![Downloads](https://static.pepy.tech/badge/bubble-data-api-client/month)](https://pepy.tech/project/bubble-data-api-client)
+
 **Async-first** Python client for the Bubble Data API, offering an **synchronous** and **asynchronous** interfaces.
 
 ## Features
