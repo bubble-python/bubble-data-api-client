@@ -1,6 +1,6 @@
 [project]
 name = "bubble-data-api-client"
-version = "0.0.1a7"
+version = "0.0.1a8"
 description = "Python client for Bubble Data API"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -8,6 +8,9 @@ dependencies = [
     "httpx~=0.28",
     "pydantic~=2.11",
 ]
+
+[project.urls]
+homepage = "https://github.com/bubble-python/bubble-data-api-client"
 
 [dependency-groups]
 dev = [
@@ -17,7 +20,7 @@ dev = [
     "ruff~=0.12",
     "respx~=0.22",
     "python-dotenv~=1.1.1",
-    "ipython~=9.4.0",
+    "ipython~=9.5",
 ]
 
 # ruff configuration
