@@ -1,6 +1,6 @@
 [project]
 name = "bubble-data-api-client"
-version = "0.0.1a8"
+version = "0.0.1a9"
 description = "Python client for Bubble Data API"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/bubble-python/bubble-data-api-client"
+Homepage = "https://github.com/bubble-python/bubble-data-api-client"
 
 [dependency-groups]
 dev = [
