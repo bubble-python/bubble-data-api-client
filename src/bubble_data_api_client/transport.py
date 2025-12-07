@@ -64,6 +64,7 @@ class Transport:
         content: str | None = None,
         json: typing.Any = None,
         params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         response: httpx.Response = await self._http.request(
             method=method,
@@ -71,6 +72,7 @@ class Transport:
             content=content,
             json=json,
             params=params,
+            headers=headers,
         )
         response.raise_for_status()
         return response
@@ -96,4 +98,9 @@ class Transport:
         return await self.request(method="POST", url=url, json=json)
 
     async def post_text(self, url: str, content: str) -> httpx.Response:
-        return await self.request(method="POST", url=url, content=content)
+        return await self.request(
+            method="POST",
+            url=url,
+            content=content,
+            headers={"Content-Type": "text/plain"},
+        )
