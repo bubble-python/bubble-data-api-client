@@ -15,11 +15,11 @@ Homepage = "https://github.com/bubble-python/bubble-data-api-client"
 [dependency-groups]
 dev = [
     "coverage~=7.10",
-    "pytest~=8.4",
+    "pytest~=9.0",
     "pytest-asyncio~=1.1",
     "ruff~=0.12",
     "respx~=0.22",
-    "python-dotenv~=1.1.1",
+    "python-dotenv~=1.2.1",
     "ipython~=9.5",
 ]
 
