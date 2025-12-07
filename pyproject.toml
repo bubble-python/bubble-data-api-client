@@ -21,6 +21,7 @@ dev = [
     "respx~=0.22",
     "python-dotenv~=1.2.1",
     "ipython~=9.5",
+    "pre-commit~=4.5",
 ]
 
 # ruff configuration
