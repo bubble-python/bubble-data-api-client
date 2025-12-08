@@ -47,3 +47,44 @@ async def test_orm_integration():
     # verify deletion
     thing4 = await IntegrationTestModel.get(thing.uid)
     assert thing4 is None
+
+
+@pytest.mark.asyncio
+async def test_get_many():
+    """Integration test for get_many method."""
+    # create multiple things
+    thing1 = await IntegrationTestModel.create(text="item1")
+    thing2 = await IntegrationTestModel.create(text="item2")
+    thing3 = await IntegrationTestModel.create(text="item3")
+
+    try:
+        # get_many with all uids
+        results = await IntegrationTestModel.get_many([thing1.uid, thing2.uid, thing3.uid])
+        assert len(results) == 3
+        assert isinstance(results, dict)
+        assert results[thing1.uid].text == "item1"
+        assert results[thing2.uid].text == "item2"
+        assert results[thing3.uid].text == "item3"
+
+        # get_many with subset of uids
+        results = await IntegrationTestModel.get_many([thing1.uid, thing3.uid])
+        assert len(results) == 2
+        assert thing1.uid in results
+        assert thing2.uid not in results
+        assert thing3.uid in results
+
+        # get_many with empty list
+        results = await IntegrationTestModel.get_many([])
+        assert results == {}
+
+        # get_many with non-existent uid
+        results = await IntegrationTestModel.get_many([thing1.uid, "non_existent_uid"])
+        assert len(results) == 1
+        assert thing1.uid in results
+        assert "non_existent_uid" not in results
+
+    finally:
+        # cleanup
+        await thing1.delete()
+        await thing2.delete()
+        await thing3.delete()

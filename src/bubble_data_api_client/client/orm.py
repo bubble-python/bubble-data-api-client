@@ -7,6 +7,7 @@ from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import RawClient
 from bubble_data_api_client.config import get_config
+from bubble_data_api_client.constraints import ConstraintTypes, constraint
 
 
 def _get_client() -> RawClient:
@@ -39,6 +40,7 @@ class BubbleBaseModel(PydanticBaseModel):
 
     @classmethod
     async def get(cls, uid: str) -> typing.Self | None:
+        """Retrieve a single thing by its unique ID."""
         async with _get_client() as client:
             try:
                 response = await client.retrieve(cls._typename, uid)
@@ -48,6 +50,16 @@ class BubbleBaseModel(PydanticBaseModel):
                 if e.response.status_code == http.HTTPStatus.NOT_FOUND:
                     return None
                 raise
+
+    @classmethod
+    async def get_many(cls, uids: list[str]) -> dict[str, typing.Self]:
+        """Retrieve multiple things by their unique IDs, keyed by uid."""
+        if not uids:
+            return {}
+        items: list[typing.Self] = await cls.list(
+            constraints=[constraint("_id", ConstraintTypes.IN, uids)],
+        )
+        return {item.uid: item for item in items}
 
     async def save(self) -> None:
         async with _get_client() as client:
