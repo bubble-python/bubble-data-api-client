@@ -24,28 +24,21 @@ def httpx_client_factory(
 class Transport:
     """
     Transport layer focuses on HTTP.
-    - manage connections
-    - authentication
-    - headers
-    - retries, backoff
-    - timeouts
-    - exposes errors to the client
+    - authentication, headers, retries, timeouts: configured via httpx_client_factory
+    - connection lifecycle: managed by pool module
+    - HTTP verb methods: get, post, patch, put, delete
+    - error handling: raise_for_status on responses
     """
 
-    _base_url: str
-    _api_key: str
     _http: httpx.AsyncClient
 
-    def __init__(self, base_url: str, api_key: str):
-        self._base_url = base_url
-        self._api_key = api_key
+    def __init__(self) -> None:
+        pass
 
     async def __aenter__(self) -> typing.Self:
-        self._http = httpx_client_factory(
-            base_url=self._base_url,
-            api_key=self._api_key,
-        )
+        from .pool import get_client
 
+        self._http = get_client()
         return self
 
     async def __aexit__(
@@ -54,7 +47,7 @@ class Transport:
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> None:
-        await self._http.aclose()
+        pass
 
     async def request(
         self,

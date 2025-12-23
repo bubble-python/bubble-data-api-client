@@ -24,23 +24,13 @@ class RawClient:
     https://www.postman.com/bubbleapi/bubble/request/jigyk5v/
     """
 
-    _data_api_root_url: str
-    _api_key: str
     _transport: Transport
 
-    def __init__(
-        self,
-        data_api_root_url: str,
-        api_key: str,
-    ):
-        self._data_api_root_url = data_api_root_url
-        self._api_key = api_key
+    def __init__(self) -> None:
+        pass
 
     async def __aenter__(self) -> typing.Self:
-        self._transport = Transport(
-            base_url=self._data_api_root_url,
-            api_key=self._api_key,
-        )
+        self._transport = Transport()
         await self._transport.__aenter__()
         return self
 

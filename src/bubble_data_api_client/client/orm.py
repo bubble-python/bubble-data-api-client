@@ -6,19 +6,11 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import RawClient
-from bubble_data_api_client.config import get_config
 from bubble_data_api_client.constraints import ConstraintTypes, constraint
 
 
 def _get_client() -> RawClient:
-    config = get_config()
-    api_root = config.get("data_api_root_url")
-    api_key = config.get("api_key")
-    if not api_root:
-        raise RuntimeError("data_api_root_url")
-    if not api_key:
-        raise RuntimeError("api_key")
-    return RawClient(data_api_root_url=api_root, api_key=api_key)
+    return RawClient()
 
 
 class BubbleBaseModel(PydanticBaseModel):
