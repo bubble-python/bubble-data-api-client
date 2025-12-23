@@ -1,3 +1,3 @@
-from .config import configure
+from .config import configure, set_config_provider
 
-__all__ = ["configure"]
+__all__ = ["configure", "set_config_provider"]
