@@ -1,33 +1,23 @@
+"""HTTP transport layer for Bubble Data API requests."""
+
 import types
 import typing
 
 import httpx
 
-DEFAULT_USER_AGENT = "bubble-data-api-client"
-
-
-def httpx_client_factory(
-    base_url: str,
-    api_key: str,
-) -> httpx.AsyncClient:
-    return httpx.AsyncClient(
-        base_url=base_url,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "User-Agent": DEFAULT_USER_AGENT,
-        },
-        transport=httpx.AsyncHTTPTransport(retries=3),
-        timeout=httpx.Timeout(60.0),
-    )
+from bubble_data_api_client.pool import get_client
 
 
 class Transport:
-    """
-    Transport layer focuses on HTTP.
-    - authentication, headers, retries, timeouts: configured via httpx_client_factory
-    - connection lifecycle: managed by pool module
-    - HTTP verb methods: get, post, patch, put, delete
-    - error handling: raise_for_status on responses
+    """Async context manager for HTTP operations.
+
+    Responsibilities:
+    - Obtains a pooled httpx client on entry
+    - Provides HTTP verb methods (get, post, patch, put, delete)
+    - Raises on non-2xx responses
+
+    HTTP client configuration (headers, retries, timeouts) is handled by
+    the http_client module. Connection pooling is handled by the pool module.
     """
 
     _http: httpx.AsyncClient
@@ -36,9 +26,6 @@ class Transport:
         pass
 
     async def __aenter__(self) -> typing.Self:
-        # deferred import to avoid circular dependency: pool imports transport
-        from bubble_data_api_client.pool import get_client
-
         self._http = get_client()
         return self
 

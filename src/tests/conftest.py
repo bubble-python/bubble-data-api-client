@@ -9,6 +9,7 @@ import pytest  # noqa: E402
 
 from bubble_data_api_client import configure, settings  # noqa: E402
 from bubble_data_api_client.client import raw_client  # noqa: E402
+from bubble_data_api_client.pool import close_clients  # noqa: E402
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def test_api_key() -> str:
 
 
 @pytest.fixture(autouse=True)
-def auto_configure_client():
+async def auto_configure_client() -> AsyncGenerator[None]:
     """Automatically configure the client for every test run."""
     if not settings.BUBBLE_DATA_API_ROOT_URL:
         raise RuntimeError("BUBBLE_DATA_API_ROOT_URL")
@@ -34,19 +35,15 @@ def auto_configure_client():
         api_key=settings.BUBBLE_API_KEY,
     )
 
+    yield
+
+    await close_clients()
+
 
 @pytest.fixture
 async def bubble_raw_client() -> AsyncGenerator[raw_client.RawClient]:
     """Provide a raw client for testing the low-level API."""
-    if not settings.BUBBLE_DATA_API_ROOT_URL:
-        raise RuntimeError("BUBBLE_DATA_API_ROOT_URL")
-    if not settings.BUBBLE_API_KEY:
-        raise RuntimeError("BUBBLE_API_KEY")
-
-    async with raw_client.RawClient(
-        data_api_root_url=settings.BUBBLE_DATA_API_ROOT_URL,
-        api_key=settings.BUBBLE_API_KEY,
-    ) as client_instance:
+    async with raw_client.RawClient() as client_instance:
         yield client_instance
 
 
