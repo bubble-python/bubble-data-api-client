@@ -145,7 +145,9 @@ matplotlib-inline==0.2.1 \
 nodeenv==1.10.0 \
     --hash=sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827 \
     --hash=sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb
-    # via pre-commit
+    # via
+    #   pre-commit
+    #   pyright
 packaging==25.0 \
     --hash=sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484 \
     --hash=sha256:d443872c98d677bf60f6a1f2f8c1cb748e8fe762d2bf9d3148b5599295b0fc4f
@@ -237,6 +239,9 @@ pygments==2.19.2 \
     #   ipython
     #   ipython-pygments-lexers
     #   pytest
+pyright==1.1.407 \
+    --hash=sha256:099674dba5c10489832d4a4b2d302636152a9a42d317986c38474c76fe562262 \
+    --hash=sha256:6dd419f54fcc13f03b52285796d65e639786373f433e243f8b94cf93a7444d21
 pytest==9.0.2 \
     --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b \
     --hash=sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11
@@ -317,6 +322,7 @@ typing-extensions==4.15.0 \
     # via
     #   pydantic
     #   pydantic-core
+    #   pyright
     #   typing-inspection
 typing-inspection==0.4.2 \
     --hash=sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7 \
