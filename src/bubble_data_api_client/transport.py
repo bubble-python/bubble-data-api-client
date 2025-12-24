@@ -37,7 +37,7 @@ class Transport:
 
     async def __aenter__(self) -> typing.Self:
         # deferred import to avoid circular dependency: pool imports transport
-        from .pool import get_client
+        from bubble_data_api_client.pool import get_client
 
         self._http = get_client()
         return self

@@ -8,9 +8,9 @@ from contextlib import asynccontextmanager
 
 import httpx
 
-from .config import get_config
-from .exceptions import ConfigurationError
-from .transport import httpx_client_factory
+from bubble_data_api_client.config import get_config
+from bubble_data_api_client.exceptions import ConfigurationError
+from bubble_data_api_client.transport import httpx_client_factory
 
 # global client pool keyed by config
 _clients: dict[tuple[str, str], httpx.AsyncClient] = {}
