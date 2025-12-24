@@ -36,6 +36,7 @@ class Transport:
         pass
 
     async def __aenter__(self) -> typing.Self:
+        # deferred import to avoid circular dependency: pool imports transport
         from .pool import get_client
 
         self._http = get_client()
