@@ -3,12 +3,12 @@
 import asyncio
 import atexit
 import threading
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
 
-from bubble_data_api_client.config import get_config
+from bubble_data_api_client.config import BubbleConfig, get_config
 from bubble_data_api_client.exceptions import ConfigurationError
 from bubble_data_api_client.http_client import httpx_client_factory
 
@@ -17,11 +17,9 @@ _clients: dict[tuple[str, str], httpx.AsyncClient] = {}
 _lock = threading.Lock()
 
 
-def _make_client_key(config: Mapping[str, str | None]) -> tuple[str, str]:
+def _make_client_key(config: BubbleConfig) -> tuple[str, str]:
     """Generate a unique key for client pooling based on config."""
-    base_url = config.get("data_api_root_url") or ""
-    api_key = config.get("api_key") or ""
-    return (base_url, api_key)
+    return (config["data_api_root_url"], config["api_key"])
 
 
 def get_client() -> httpx.AsyncClient:
@@ -37,10 +35,10 @@ def get_client() -> httpx.AsyncClient:
     with _lock:
         # double-check after acquiring lock
         if key not in _clients:
-            base_url = config.get("data_api_root_url")
+            base_url = config["data_api_root_url"]
             if not base_url:
                 raise ConfigurationError("data_api_root_url")
-            api_key = config.get("api_key")
+            api_key = config["api_key"]
             if not api_key:
                 raise ConfigurationError("api_key")
             _clients[key] = httpx_client_factory(base_url=base_url, api_key=api_key)

@@ -5,6 +5,7 @@ import typing
 
 import httpx
 
+from bubble_data_api_client.config import get_config
 from bubble_data_api_client.pool import get_client
 
 
@@ -47,16 +48,22 @@ class Transport:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
-        response: httpx.Response = await self._http.request(
-            method=method,
-            url=url,
-            content=content,
-            json=json,
-            params=params,
-            headers=headers,
-        )
-        response.raise_for_status()
-        return response
+        async def do_request() -> httpx.Response:
+            response: httpx.Response = await self._http.request(
+                method=method,
+                url=url,
+                content=content,
+                json=json,
+                params=params,
+                headers=headers,
+            )
+            response.raise_for_status()
+            return response
+
+        retry = get_config().get("retry")
+        if retry is not None:
+            return await retry(do_request)
+        return await do_request()
 
     async def get(
         self,

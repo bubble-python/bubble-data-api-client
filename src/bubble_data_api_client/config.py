@@ -4,13 +4,6 @@ from typing import NotRequired, TypedDict, TypeIs
 import tenacity
 
 
-class BubbleConfigError(RuntimeError):
-    """Raised when Bubble API is not configured."""
-
-    def __init__(self) -> None:
-        super().__init__("Bubble API not configured. Call configure() first.")
-
-
 class _NotSet:
     """Sentinel for configuration values that were not provided."""
 
@@ -39,7 +32,7 @@ class BubbleConfig(TypedDict):
 
 type ConfigProvider = Callable[[], BubbleConfig]
 
-_static_config: BubbleConfig | None = None
+_static_config: BubbleConfig = {"data_api_root_url": "", "api_key": ""}
 _config_provider: ConfigProvider | None = None
 
 
@@ -69,6 +62,4 @@ def get_config() -> BubbleConfig:
     """Get current configuration from provider if set, otherwise static config."""
     if _config_provider is not None:
         return _config_provider()
-    if _static_config is None:
-        raise BubbleConfigError
     return _static_config
