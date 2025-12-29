@@ -10,7 +10,8 @@ classifiers = [
 ]
 dependencies = [
     "httpx~=0.28",
-    "pydantic~=2.11",
+    "pydantic~=2.12",
+    "tenacity~=9.1",
 ]
 
 [project.urls]
