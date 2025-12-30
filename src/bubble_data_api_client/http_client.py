@@ -3,7 +3,7 @@
 import httpx
 
 DEFAULT_USER_AGENT = "bubble-data-api-client"
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 20.0
 DEFAULT_RETRY_COUNT = 3
 
 
