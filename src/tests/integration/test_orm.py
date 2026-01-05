@@ -32,8 +32,8 @@ async def test_orm_integration():
     assert isinstance(thing3, IntegrationTestModel)
     assert thing3.text == "test2"
 
-    # list
-    things = await IntegrationTestModel.list(
+    # find
+    things = await IntegrationTestModel.find(
         constraints=[{"key": "_id", "constraint_type": "equals", "value": thing3.uid}]
     )
     assert len(things) == 1

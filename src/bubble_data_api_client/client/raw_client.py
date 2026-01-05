@@ -64,7 +64,7 @@ class RawClient:
         return await self._transport.put(f"/{typename}/{uid}", json=data)
 
     # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#get-a-list-of-things
-    async def list(
+    async def find(
         self,
         typename: str,
         *,
@@ -94,3 +94,14 @@ class RawClient:
             params["additional_sort_fields"] = json.dumps(additional_sort_fields)
 
         return await self._transport.get(f"/{typename}", params=params)
+
+    async def count(
+        self,
+        typename: str,
+        *,
+        constraints: list[Constraint] | None = None,
+    ) -> int:
+        """Return total count of objects matching constraints."""
+        response = await self.find(typename, constraints=constraints, limit=1)
+        body = response.json()["response"]
+        return body["count"] + body["remaining"]

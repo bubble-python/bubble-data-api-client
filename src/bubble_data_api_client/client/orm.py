@@ -6,7 +6,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import RawClient
-from bubble_data_api_client.constraints import ConstraintTypes, constraint
+from bubble_data_api_client.constraints import Constraint, ConstraintTypes, constraint
 
 
 def _get_client() -> RawClient:
@@ -48,7 +48,7 @@ class BubbleBaseModel(PydanticBaseModel):
         """Retrieve multiple things by their unique IDs, keyed by uid."""
         if not uids:
             return {}
-        items: list[typing.Self] = await cls.list(
+        items: list[typing.Self] = await cls.find(
             constraints=[constraint("_id", ConstraintTypes.IN, uids)],
         )
         return {item.uid: item for item in items}
@@ -65,10 +65,10 @@ class BubbleBaseModel(PydanticBaseModel):
             response.raise_for_status()
 
     @classmethod
-    async def list(
+    async def find(
         cls,
         *,
-        constraints: list | None = None,
+        constraints: list[Constraint] | None = None,
         cursor: int | None = None,
         limit: int | None = None,
         sort_field: str | None = None,
@@ -77,7 +77,7 @@ class BubbleBaseModel(PydanticBaseModel):
         additional_sort_fields: list | None = None,
     ) -> list[typing.Self]:
         async with _get_client() as client:
-            response = await client.list(
+            response = await client.find(
                 cls._typename,
                 constraints=constraints,
                 cursor=cursor,
@@ -89,3 +89,9 @@ class BubbleBaseModel(PydanticBaseModel):
             )
             response.raise_for_status()
             return [cls(**item) for item in response.json()["response"]["results"]]
+
+    @classmethod
+    async def count(cls, *, constraints: list[Constraint] | None = None) -> int:
+        """Return total count of objects matching constraints."""
+        async with _get_client() as client:
+            return await client.count(cls._typename, constraints=constraints)
