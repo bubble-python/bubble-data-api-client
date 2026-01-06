@@ -1,3 +1,4 @@
+import http
 import json
 import types
 import typing
@@ -105,3 +106,35 @@ class RawClient:
         response = await self.find(typename, constraints=constraints, limit=1)
         body = response.json()["response"]
         return body["count"] + body["remaining"]
+
+    async def exists(
+        self,
+        typename: str,
+        uid: str | None = None,
+        *,
+        constraints: list[Constraint] | None = None,
+    ) -> bool:
+        """Check if record(s) exist by ID or constraints."""
+        if uid is not None and constraints is not None:
+            msg = "Cannot specify both uid and constraints"
+            raise ValueError(msg)
+
+        if uid is not None:
+            # ID lookup: retrieve + 404 is optimal (no JSON parsing needed)
+            try:
+                await self.retrieve(typename, uid)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == http.HTTPStatus.NOT_FOUND:
+                    return False
+                raise
+            else:
+                return True
+
+        # constraint-based: find with exclude_remaining for DB short-circuit
+        response = await self.find(
+            typename,
+            constraints=constraints,
+            limit=1,
+            exclude_remaining=True,
+        )
+        return response.json()["response"]["count"] >= 1

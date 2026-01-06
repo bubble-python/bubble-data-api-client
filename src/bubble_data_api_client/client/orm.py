@@ -95,3 +95,14 @@ class BubbleBaseModel(PydanticBaseModel):
         """Return total count of objects matching constraints."""
         async with _get_client() as client:
             return await client.count(cls._typename, constraints=constraints)
+
+    @classmethod
+    async def exists(
+        cls,
+        uid: str | None = None,
+        *,
+        constraints: list[Constraint] | None = None,
+    ) -> bool:
+        """Check if record(s) exist by ID or constraints."""
+        async with _get_client() as client:
+            return await client.exists(cls._typename, uid=uid, constraints=constraints)
