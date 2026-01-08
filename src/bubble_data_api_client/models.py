@@ -12,8 +12,7 @@ class BubbleThing(BaseModel):
     id: str = Field(
         ...,
         alias="_id",
-        description="The Unique ID is a 32-character alphanumeric string "
-        "that identifies a specific thing in the database.",
+        description="The Unique ID in format '{timestamp}x{random}' that identifies a specific thing in the database.",
     )
     created_date: datetime = Field(
         ...,

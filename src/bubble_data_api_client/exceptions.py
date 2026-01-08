@@ -19,3 +19,11 @@ class BubbleNotFoundError(BubbleHttpError):
 
 class BubbleUnauthorizedError(BubbleHttpError):
     """Raised when the user is not authorized to access a resource."""
+
+
+class InvalidBubbleUIDError(ValueError):
+    """Raised when a string is not a valid Bubble UID."""
+
+    def __init__(self, value: str) -> None:
+        super().__init__(f"invalid Bubble UID format: {value}")
+        self.value = value
