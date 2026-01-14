@@ -89,10 +89,11 @@ async def close_clients() -> None:
         ]
 
     for client in clients_to_close:
-        try:
-            await client.aclose()
-        except Exception:
-            pass  # best-effort cleanup, continue with remaining clients
+        if not client.is_closed:
+            try:
+                await client.aclose()
+            except Exception:
+                pass  # best-effort cleanup, continue with remaining clients
 
 
 @asynccontextmanager
@@ -126,19 +127,21 @@ def _atexit_cleanup() -> None:
         if running_loop is not None and running_loop.is_running():
             # edge case: event loop still running, schedule cleanup with timeout
             for client in clients_to_close:
-                future = asyncio.run_coroutine_threadsafe(client.aclose(), running_loop)
-                try:
-                    future.result(timeout=5.0)
-                except Exception:
-                    pass
+                if not client.is_closed:
+                    try:
+                        future = asyncio.run_coroutine_threadsafe(client.aclose(), running_loop)
+                        future.result(timeout=5.0)
+                    except Exception:
+                        pass
         else:
             # no running loop, create one and close all clients
             async def _close_all() -> None:
                 for client in clients_to_close:
-                    try:
-                        await client.aclose()
-                    except Exception:
-                        pass
+                    if not client.is_closed:
+                        try:
+                            await client.aclose()
+                        except Exception:
+                            pass
 
             try:
                 asyncio.run(_close_all())
