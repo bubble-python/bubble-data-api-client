@@ -73,23 +73,31 @@ def _atexit_cleanup() -> None:
     if not clients_to_close:
         return
 
-    # check if there's already a running loop
+    # detect loop state to choose cleanup strategy
     try:
         running_loop = asyncio.get_running_loop()
     except RuntimeError:
         running_loop = None
 
     try:
-        if running_loop is not None:
-            # loop still running at atexit, schedule cleanup tasks
+        if running_loop is not None and running_loop.is_running():
+            # edge case: event loop still running, schedule cleanup with timeout
             for client in clients_to_close:
-                running_loop.create_task(client.aclose())
+                future = asyncio.run_coroutine_threadsafe(client.aclose(), running_loop)
+                try:
+                    future.result(timeout=5.0)
+                except Exception:
+                    pass
         else:
-            # no running loop, create one for cleanup
-            loop = asyncio.new_event_loop()
-            for client in clients_to_close:
-                loop.run_until_complete(client.aclose())
-            loop.close()
+            # no running loop, create one and close all clients
+            async def _close_all() -> None:
+                for client in clients_to_close:
+                    await client.aclose()
+
+            try:
+                asyncio.run(_close_all())
+            except Exception:
+                pass
     except Exception:
         pass
 
