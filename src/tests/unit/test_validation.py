@@ -100,3 +100,9 @@ def test_filter_bubble_uids_accepts_iterator() -> None:
     """Should work with any iterable, not just lists."""
     values = iter(["1x2", "invalid", "3x4"])
     assert filter_bubble_uids(values) == ["1x2", "3x4"]
+
+
+def test_filter_bubble_uids_non_string_values() -> None:
+    """Non-string values should be filtered out."""
+    values = ["1x2", None, 123, "3x4", {"uid": "5x6"}, True, "7x8"]
+    assert filter_bubble_uids(values) == ["1x2", "3x4", "7x8"]
