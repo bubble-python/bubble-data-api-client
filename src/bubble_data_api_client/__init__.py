@@ -6,7 +6,7 @@ from bubble_data_api_client.config import (
     configure,
     set_config_provider,
 )
-from bubble_data_api_client.constraints import Constraint, ConstraintTypes, constraint
+from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.pool import client_scope, close_clients
 from bubble_data_api_client.types import (
     BubbleField,
@@ -28,7 +28,7 @@ __all__ = [
     "RawClient",
     # query building
     "Constraint",
-    "ConstraintTypes",
+    "ConstraintType",
     "constraint",
     # client lifecycle
     "client_scope",

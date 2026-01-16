@@ -1,7 +1,7 @@
 import pytest
 
 from bubble_data_api_client.client.orm import BubbleBaseModel
-from bubble_data_api_client.constraints import ConstraintTypes, constraint
+from bubble_data_api_client.constraints import ConstraintType, constraint
 from bubble_data_api_client.types import BubbleField
 
 
@@ -36,7 +36,7 @@ async def test_orm_integration():
 
     # find
     things = await IntegrationTestModel.find(
-        constraints=[constraint(BubbleField.ID, ConstraintTypes.EQUALS, thing3.uid)]
+        constraints=[constraint(BubbleField.ID, ConstraintType.EQUALS, thing3.uid)]
     )
     assert len(things) == 1
     assert isinstance(things[0], IntegrationTestModel)

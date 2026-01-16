@@ -27,7 +27,7 @@ user = await User.get(uid)
 
 # query
 users = await User.find(constraints=[
-    constraint("status", ConstraintTypes.EQUALS, "active")
+    constraint("status", ConstraintType.EQUALS, "active")
 ])
 
 # update
@@ -43,7 +43,7 @@ if await User.exists(uid):
 
 # count
 active_count = await User.count(constraints=[
-    constraint("status", ConstraintTypes.EQUALS, "active")
+    constraint("status", ConstraintType.EQUALS, "active")
 ])
 ```
 
@@ -178,11 +178,11 @@ user = await User.create(name="Ada Lovelace", email="ada@example.com")
 user = await User.get("1234567890x1234567890")
 
 # query with constraints
-from bubble_data_api_client import constraint, ConstraintTypes
+from bubble_data_api_client import constraint, ConstraintType
 
 active_users = await User.find(constraints=[
-    constraint("status", ConstraintTypes.EQUALS, "active"),
-    constraint("age", ConstraintTypes.GREATER_THAN, 18),
+    constraint("status", ConstraintType.EQUALS, "active"),
+    constraint("age", ConstraintType.GREATER_THAN, 18),
 ])
 
 # update
@@ -235,14 +235,14 @@ user, created = await User.create_or_update(
 Build type-safe queries using Bubble's constraint system:
 
 ```python
-from bubble_data_api_client import constraint, ConstraintTypes
+from bubble_data_api_client import constraint, ConstraintType
 
 constraints = [
-    constraint("status", ConstraintTypes.EQUALS, "active"),
-    constraint("age", ConstraintTypes.GREATER_THAN, 21),
-    constraint("tags", ConstraintTypes.CONTAINS, "premium"),
-    constraint("email", ConstraintTypes.IS_NOT_EMPTY),
-    constraint("category", ConstraintTypes.IN, ["A", "B", "C"]),
+    constraint("status", ConstraintType.EQUALS, "active"),
+    constraint("age", ConstraintType.GREATER_THAN, 21),
+    constraint("tags", ConstraintType.CONTAINS, "premium"),
+    constraint("email", ConstraintType.IS_NOT_EMPTY),
+    constraint("category", ConstraintType.IN, ["A", "B", "C"]),
 ]
 
 results = await User.find(constraints=constraints)
@@ -314,7 +314,7 @@ This library is async-only, but you can use it in sync code:
 
 ```python
 import asyncio
-from bubble_data_api_client import BubbleBaseModel, constraint, ConstraintTypes
+from bubble_data_api_client import BubbleBaseModel, constraint, ConstraintType
 
 class User(BubbleBaseModel, typename="user"):
     name: str
@@ -327,8 +327,8 @@ user = asyncio.run(User.get("1234567890x1234567890"))
 # or wrap multiple operations
 async def main():
     constraints = [
-        constraint("is_verified", ConstraintTypes.EQUALS, True),
-        constraint("account_type", ConstraintTypes.EQUALS, "premium"),
+        constraint("is_verified", ConstraintType.EQUALS, True),
+        constraint("account_type", ConstraintType.EQUALS, "premium"),
     ]
     users = await User.find(constraints=constraints)
     for user in users:

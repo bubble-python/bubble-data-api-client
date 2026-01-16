@@ -6,7 +6,7 @@ import typing
 
 import httpx
 
-from bubble_data_api_client.constraints import Constraint, ConstraintTypes, constraint
+from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.exceptions import InvalidOnMultipleError, MultipleMatchesError, PartialFailureError
 from bubble_data_api_client.transport import Transport
 from bubble_data_api_client.types import BubbleField, CreateOrUpdateResult, OnMultiple
@@ -179,7 +179,7 @@ class RawClient:
 
         # build equals constraints from match fields to find existing thing
         constraints: list[Constraint] = [
-            constraint(key=key, constraint_type=ConstraintTypes.EQUALS, value=value) for key, value in match.items()
+            constraint(key=key, constraint_type=ConstraintType.EQUALS, value=value) for key, value in match.items()
         ]
 
         # for dedupe strategies, sort by created date to determine oldest/newest

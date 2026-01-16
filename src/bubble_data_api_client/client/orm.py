@@ -6,7 +6,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import RawClient
-from bubble_data_api_client.constraints import Constraint, ConstraintTypes, constraint
+from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.types import BubbleField, OnMultiple
 
 
@@ -50,7 +50,7 @@ class BubbleBaseModel(PydanticBaseModel):
         if not uids:
             return {}
         items: list[typing.Self] = await cls.find(
-            constraints=[constraint(BubbleField.ID, ConstraintTypes.IN, uids)],
+            constraints=[constraint(BubbleField.ID, ConstraintType.IN, uids)],
         )
         return {item.uid: item for item in items}
 

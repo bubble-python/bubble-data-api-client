@@ -1,4 +1,5 @@
 import typing
+from enum import StrEnum
 
 
 # all constraints are of the form:
@@ -25,7 +26,9 @@ def constraint(
 
 
 # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#constraint-types
-class ConstraintTypes:
+class ConstraintType(StrEnum):
+    """Constraint types for Bubble Data API queries."""
+
     # Use to test strict equality
     EQUALS = "equals"
     NOT_EQUAL = "not equal"
@@ -55,6 +58,6 @@ class ConstraintTypes:
     EMPTY = "empty"
     NOT_EMPTY = "not empty"
 
-    # Use to test if the current thing is within a radius from a central address.#
+    # Use to test if the current thing is within a radius from a central address.
     # To use this, the value sent with the constraint must have an address and a range.
     GEOGRAPHIC_SEARCH = "geographic_search"
