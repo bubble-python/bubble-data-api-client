@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from bubble_data_api_client.client import raw_client
+from bubble_data_api_client.types import BubbleField
 
 
 @pytest.fixture()
@@ -33,8 +34,8 @@ async def test_retrieve_success(typename: str, test_thing_id: str, bubble_raw_cl
 
     response_body = response.json()
     assert "response" in response_body
-    assert "_id" in response_body["response"]
-    assert response_body["response"]["_id"] == test_thing_id
+    assert BubbleField.ID in response_body["response"]
+    assert response_body["response"][BubbleField.ID] == test_thing_id
     assert "text" in response_body["response"]
     assert response_body["response"]["text"] == "integration test"
 

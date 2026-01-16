@@ -27,3 +27,39 @@ class InvalidBubbleUIDError(ValueError):
     def __init__(self, value: str) -> None:
         super().__init__(f"invalid Bubble UID format: {value}")
         self.value = value
+
+
+class MultipleMatchesError(BubbleError):
+    """Raised when create_or_update finds multiple matches with on_multiple='error'."""
+
+    def __init__(self, typename: str, count: int, match: dict) -> None:
+        super().__init__(f"expected 0 or 1 matches for '{typename}', found {count} with match={match}")
+        self.typename = typename
+        self.count = count
+        self.match = match
+
+
+class InvalidOnMultipleError(BubbleError):
+    """Raised when an invalid on_multiple strategy is provided."""
+
+    def __init__(self, value: str) -> None:
+        super().__init__(f"invalid on_multiple strategy: '{value}'")
+        self.value = value
+
+
+class PartialFailureError(BubbleError):
+    """Raised when some operations in a batch succeed but others fail."""
+
+    def __init__(
+        self,
+        operation: str,
+        succeeded: list[str],
+        failed: list[tuple[str, BaseException]],
+    ) -> None:
+        failed_count = len(failed)
+        total = len(succeeded) + failed_count
+        super().__init__(f"{operation}: {failed_count}/{total} operations failed")
+        self.operation = operation
+        self.succeeded = succeeded
+        self.failed_uids = [uid for uid, _ in failed]
+        self.exceptions = [exc for _, exc in failed]

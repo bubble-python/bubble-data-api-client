@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from bubble_data_api_client.types import BubbleField
+
 
 class BubbleThing(BaseModel):
     """
@@ -11,21 +13,21 @@ class BubbleThing(BaseModel):
 
     id: str = Field(
         ...,
-        alias="_id",
+        alias=BubbleField.ID,
         description="The Unique ID in format '{timestamp}x{random}' that identifies a specific thing in the database.",
     )
     created_date: datetime = Field(
         ...,
-        alias="Created Date",
+        alias=BubbleField.CREATED_DATE,
         description="The creation date of the Bubble Thing. Never changes.",
     )
     modified_date: datetime = Field(
         ...,
-        alias="Modified Date",
+        alias=BubbleField.MODIFIED_DATE,
         description="Automatically updated any time any changes are made to the Thing.",
     )
     slug: str = Field(
         ...,
-        alias="Slug",
+        alias=BubbleField.SLUG,
         description="A user-friendly and search engine optimized URL of the Bubble Thing.",
     )

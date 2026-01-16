@@ -1,11 +1,38 @@
 """Bubble platform types for use with Pydantic models."""
 
-from typing import Annotated, Any
+from enum import StrEnum
+from typing import Annotated, Any, TypedDict
 
 from pydantic import AfterValidator, BeforeValidator
 
 from bubble_data_api_client.exceptions import InvalidBubbleUIDError
 from bubble_data_api_client.validation import is_bubble_uid
+
+
+class BubbleField(StrEnum):
+    """Built-in Bubble field names."""
+
+    ID = "_id"
+    CREATED_DATE = "Created Date"
+    MODIFIED_DATE = "Modified Date"
+    SLUG = "Slug"
+
+
+class OnMultiple(StrEnum):
+    """Strategy for handling multiple matches in create_or_update."""
+
+    ERROR = "error"
+    UPDATE_ALL = "update_all"
+    UPDATE_FIRST = "update_first"
+    DEDUPE_OLDEST = "dedupe_oldest"
+    DEDUPE_NEWEST = "dedupe_newest"
+
+
+class CreateOrUpdateResult(TypedDict):
+    """Result of a create_or_update operation."""
+
+    uids: list[str]
+    created: bool
 
 
 def _validate_bubble_uid(value: str) -> str:

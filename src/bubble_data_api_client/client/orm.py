@@ -7,6 +7,7 @@ from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import RawClient
 from bubble_data_api_client.constraints import Constraint, ConstraintTypes, constraint
+from bubble_data_api_client.types import BubbleField, OnMultiple
 
 
 def _get_client() -> RawClient:
@@ -16,7 +17,7 @@ def _get_client() -> RawClient:
 class BubbleBaseModel(PydanticBaseModel):
     _typename: typing.ClassVar[str]
 
-    uid: str = Field(..., alias="_id")
+    uid: str = Field(..., alias=BubbleField.ID)
 
     def __init_subclass__(cls, *, typename: str, **kwargs: typing.Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -28,7 +29,7 @@ class BubbleBaseModel(PydanticBaseModel):
             response = await client.create(cls._typename, data)
             response.raise_for_status()
             uid = response.json()["id"]
-            return cls(**data, _id=uid)
+            return cls(**data, **{BubbleField.ID: uid})
 
     @classmethod
     async def get(cls, uid: str) -> typing.Self | None:
@@ -49,7 +50,7 @@ class BubbleBaseModel(PydanticBaseModel):
         if not uids:
             return {}
         items: list[typing.Self] = await cls.find(
-            constraints=[constraint("_id", ConstraintTypes.IN, uids)],
+            constraints=[constraint(BubbleField.ID, ConstraintTypes.IN, uids)],
         )
         return {item.uid: item for item in items}
 
@@ -106,3 +107,23 @@ class BubbleBaseModel(PydanticBaseModel):
         """Check if record(s) exist by ID or constraints."""
         async with _get_client() as client:
             return await client.exists(cls._typename, uid=uid, constraints=constraints)
+
+    @classmethod
+    async def create_or_update(
+        cls,
+        *,
+        match: dict[str, typing.Any],
+        data: dict[str, typing.Any],
+        on_multiple: OnMultiple,
+    ) -> tuple[typing.Self, bool]:
+        """Create a thing if it doesn't exist, or update if it does."""
+        async with _get_client() as client:
+            result = await client.create_or_update(
+                typename=cls._typename,
+                match=match,
+                data=data,
+                on_multiple=on_multiple,
+            )
+            # construct instance from input data, similar to create()
+            # server-side fields like Modified Date won't be populated
+            return cls(**match, **data, **{BubbleField.ID: result["uids"][0]}), result["created"]
