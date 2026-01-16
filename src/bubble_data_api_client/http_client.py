@@ -22,6 +22,7 @@ def httpx_client_factory(
             "Authorization": f"Bearer {api_key}",
             "User-Agent": user_agent,
         },
+        http2=True,
         transport=httpx.AsyncHTTPTransport(retries=retries),
         timeout=httpx.Timeout(timeout),
     )
