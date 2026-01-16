@@ -22,6 +22,22 @@ def test_is_bubble_uid_valid(value: str) -> None:
 @pytest.mark.parametrize(
     ("value", "reason"),
     [
+        (None, "None"),
+        (123, "integer"),
+        (123.456, "float"),
+        (["1x2"], "list"),
+        ({"uid": "1x2"}, "dict"),
+        (True, "boolean"),
+    ],
+)
+def test_is_bubble_uid_non_string(value: object, reason: str) -> None:
+    """Non-string values should return False without raising."""
+    assert is_bubble_uid(value) is False, f"should reject: {reason}"
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
         ("", "empty string"),
         ("123", "no separator"),
         ("x", "only separator"),
