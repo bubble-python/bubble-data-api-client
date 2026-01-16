@@ -1,6 +1,6 @@
 [project]
 name = "bubble-data-api-client"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python client for Bubble Data API"
 readme = "README.md"
 requires-python = ">=3.13"
