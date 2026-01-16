@@ -1,9 +1,12 @@
+from bubble_data_api_client.client.orm import BubbleBaseModel
+from bubble_data_api_client.client.raw_client import RawClient
 from bubble_data_api_client.config import (
     BubbleConfig,
     ConfigProvider,
     configure,
     set_config_provider,
 )
+from bubble_data_api_client.constraints import Constraint, ConstraintTypes, constraint
 from bubble_data_api_client.pool import client_scope, close_clients
 from bubble_data_api_client.types import (
     BubbleField,
@@ -20,6 +23,13 @@ __all__ = [
     "ConfigProvider",
     "configure",
     "set_config_provider",
+    # client classes
+    "BubbleBaseModel",
+    "RawClient",
+    # query building
+    "Constraint",
+    "ConstraintTypes",
+    "constraint",
     # client lifecycle
     "client_scope",
     "close_clients",
