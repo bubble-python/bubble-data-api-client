@@ -3,13 +3,13 @@ export-all-requirements:
 
 # auto format and fix
 lint:
-	ruff format
 	ruff check --fix
+	ruff format
 
 # check the ruff rules
 lint-ci:
-	ruff format --check
 	ruff check
+	ruff format --check
 
 test:
 	pytest
