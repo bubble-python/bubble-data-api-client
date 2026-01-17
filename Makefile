@@ -14,6 +14,12 @@ lint-ci:
 test:
 	pytest
 
+test-unit:
+	pytest src/tests/unit
+
+test-integration:
+	pytest src/tests/integration
+
 coverage:
 	coverage run -m pytest && coverage report
 
