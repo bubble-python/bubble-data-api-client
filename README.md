@@ -4,6 +4,7 @@
 [![Downloads](https://static.pepy.tech/badge/bubble-data-api-client/month)](https://pepy.tech/project/bubble-data-api-client)
 [![Python Version](https://img.shields.io/pypi/pyversions/bubble-data-api-client)](https://pypi.org/project/bubble-data-api-client/)
 [![License](https://img.shields.io/pypi/l/bubble-data-api-client)](https://pypi.org/project/bubble-data-api-client/)
+[![PyPI](https://img.shields.io/pypi/v/bubble-data-api-client)](https://pypi.org/project/bubble-data-api-client/)
 
 A fast, async Python client for the [Bubble Data API](https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api) with a Pydantic-based ORM and connection pooling.
 
