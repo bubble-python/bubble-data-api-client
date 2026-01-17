@@ -28,6 +28,7 @@ dev = [
     "ipython~=9.5",
     "pre-commit~=4.5",
     "pyright~=1.1.407",
+    "pypistats~=1.7",
 ]
 
 # ruff configuration
