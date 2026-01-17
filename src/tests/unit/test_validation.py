@@ -58,7 +58,7 @@ def test_is_bubble_uid_non_string(value: object, reason: str) -> None:
         ("+123x456", "plus sign first part"),
         ("123.0x456", "decimal in first part"),
         ("123x456.0", "decimal in second part"),
-        ("١٢٣x٤٥٦", "arabic-indic digits"),
+        ("١٢٣x٤٥٦", "arabic-indic digits"),  # noqa: RUF001
         ("१२३x४५६", "devanagari digits"),
     ],
 )

@@ -92,7 +92,7 @@ async def close_clients() -> None:
         if not client.is_closed:
             try:
                 await client.aclose()
-            except Exception:
+            except Exception:  # noqa: S110
                 pass  # best-effort cleanup, continue with remaining clients
 
 
@@ -131,7 +131,7 @@ def _atexit_cleanup() -> None:
                     try:
                         future = asyncio.run_coroutine_threadsafe(client.aclose(), running_loop)
                         future.result(timeout=5.0)
-                    except Exception:
+                    except Exception:  # noqa: S110
                         pass
         else:
             # no running loop, create one and close all clients
@@ -140,14 +140,14 @@ def _atexit_cleanup() -> None:
                     if not client.is_closed:
                         try:
                             await client.aclose()
-                        except Exception:
+                        except Exception:  # noqa: S110
                             pass
 
             try:
                 asyncio.run(_close_all())
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 
