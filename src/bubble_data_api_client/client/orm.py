@@ -7,6 +7,7 @@ from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import RawClient
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
+from bubble_data_api_client.exceptions import UnknownFieldError
 from bubble_data_api_client.types import BubbleField, OnMultiple
 
 
@@ -58,6 +59,23 @@ class BubbleBaseModel(PydanticBaseModel):
         async with _get_client() as client:
             data = self.model_dump(exclude={"uid"}, by_alias=True)
             response = await client.update(self._typename, self.uid, data)
+            response.raise_for_status()
+
+    @classmethod
+    async def update(cls, uid: str, **data: typing.Any) -> None:
+        """Update specific fields on a thing by its unique ID."""
+        aliased_data: dict[str, typing.Any] = {}
+        for field_name, value in data.items():
+            field_info = cls.model_fields.get(field_name)
+            if field_info is None:
+                raise UnknownFieldError(field_name)
+            if field_info.alias:
+                aliased_data[field_info.alias] = value
+            else:
+                aliased_data[field_name] = value
+
+        async with _get_client() as client:
+            response = await client.update(cls._typename, uid, aliased_data)
             response.raise_for_status()
 
     async def delete(self) -> None:

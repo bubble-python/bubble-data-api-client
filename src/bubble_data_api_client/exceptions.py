@@ -25,6 +25,14 @@ class InvalidBubbleUIDError(ValueError):
         self.value = value
 
 
+class UnknownFieldError(BubbleError):
+    """Raised when an unknown field name is passed to update()."""
+
+    def __init__(self, field_name: str) -> None:
+        super().__init__(f"unknown field: {field_name}")
+        self.field_name = field_name
+
+
 class MultipleMatchesError(BubbleError):
     """Raised when create_or_update finds multiple matches with on_multiple='error'."""
 
