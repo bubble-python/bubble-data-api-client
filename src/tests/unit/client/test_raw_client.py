@@ -1,30 +1,8 @@
-from collections.abc import AsyncGenerator
-
 import httpx
 import pytest
 import respx
 
-from bubble_data_api_client import configure
 from bubble_data_api_client.client import raw_client
-from bubble_data_api_client.pool import close_clients
-
-
-@pytest.fixture
-async def clean_client_pool() -> AsyncGenerator[None]:
-    """Ensure client pool is clean before and after each test."""
-    await close_clients()
-    yield
-    await close_clients()
-
-
-@pytest.fixture
-def configured_client(clean_client_pool: None) -> None:
-    """Configure the client for testing."""
-    configure(
-        data_api_root_url="https://test.example.com",
-        api_key="test-key",
-        retry=None,
-    )
 
 
 async def test_raw_client_init() -> None:
@@ -45,7 +23,7 @@ async def test_raw_client_init() -> None:
 @respx.mock
 async def test_replace(configured_client: None) -> None:
     """Test that replace uses PUT to fully replace a thing."""
-    route = respx.put("https://test.example.com/customer/123x456").mock(return_value=httpx.Response(204))
+    route = respx.put("https://example.com/customer/123x456").mock(return_value=httpx.Response(204))
 
     async with raw_client.RawClient() as client:
         response = await client.replace(
@@ -61,7 +39,7 @@ async def test_replace(configured_client: None) -> None:
 @respx.mock
 async def test_bulk_create(configured_client: None) -> None:
     """Test that bulk_create posts newline-delimited JSON."""
-    route = respx.post("https://test.example.com/customer/bulk").mock(
+    route = respx.post("https://example.com/customer/bulk").mock(
         return_value=httpx.Response(200, json={"status": "success", "count": 2})
     )
 
@@ -81,7 +59,7 @@ async def test_bulk_create(configured_client: None) -> None:
 @respx.mock
 async def test_find_with_parameters(configured_client: None) -> None:
     """Test that find passes optional parameters correctly."""
-    route = respx.get("https://test.example.com/customer").mock(
+    route = respx.get("https://example.com/customer").mock(
         return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
     )
 
@@ -107,7 +85,7 @@ async def test_find_with_parameters(configured_client: None) -> None:
 @respx.mock
 async def test_find_with_additional_sort_fields(configured_client: None) -> None:
     """Test that find passes additional_sort_fields correctly."""
-    route = respx.get("https://test.example.com/customer").mock(
+    route = respx.get("https://example.com/customer").mock(
         return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
     )
 
@@ -125,7 +103,7 @@ async def test_find_with_additional_sort_fields(configured_client: None) -> None
 @respx.mock
 async def test_count(configured_client: None) -> None:
     """Test that count returns total from count + remaining."""
-    respx.get("https://test.example.com/customer").mock(
+    respx.get("https://example.com/customer").mock(
         return_value=httpx.Response(200, json={"response": {"results": [], "count": 5, "remaining": 95}})
     )
 
@@ -138,7 +116,7 @@ async def test_count(configured_client: None) -> None:
 @respx.mock
 async def test_exists_by_uid_found(configured_client: None) -> None:
     """Test exists returns True when record found by uid."""
-    respx.get("https://test.example.com/customer/123x456").mock(
+    respx.get("https://example.com/customer/123x456").mock(
         return_value=httpx.Response(200, json={"response": {"_id": "123x456"}})
     )
 
@@ -151,7 +129,7 @@ async def test_exists_by_uid_found(configured_client: None) -> None:
 @respx.mock
 async def test_exists_by_uid_not_found(configured_client: None) -> None:
     """Test exists returns False when record not found by uid."""
-    respx.get("https://test.example.com/customer/123x456").mock(
+    respx.get("https://example.com/customer/123x456").mock(
         return_value=httpx.Response(404, json={"status": "NOT_FOUND"})
     )
 
@@ -164,7 +142,7 @@ async def test_exists_by_uid_not_found(configured_client: None) -> None:
 @respx.mock
 async def test_exists_by_uid_error_reraises(configured_client: None) -> None:
     """Test exists re-raises non-404 HTTP errors."""
-    respx.get("https://test.example.com/customer/123x456").mock(
+    respx.get("https://example.com/customer/123x456").mock(
         return_value=httpx.Response(500, json={"error": "server error"})
     )
 
@@ -178,7 +156,7 @@ async def test_exists_by_uid_error_reraises(configured_client: None) -> None:
 @respx.mock
 async def test_exists_by_constraints(configured_client: None) -> None:
     """Test exists with constraints uses find."""
-    respx.get("https://test.example.com/customer").mock(
+    respx.get("https://example.com/customer").mock(
         return_value=httpx.Response(200, json={"response": {"results": [{"_id": "1x1"}], "count": 1, "remaining": 0}})
     )
 
