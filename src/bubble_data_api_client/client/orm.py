@@ -56,7 +56,7 @@ class BubbleBaseModel(PydanticBaseModel):
 
     async def save(self) -> None:
         async with _get_client() as client:
-            data = self.model_dump(exclude={"uid"})
+            data = self.model_dump(exclude={"uid"}, by_alias=True)
             response = await client.update(self._typename, self.uid, data)
             response.raise_for_status()
 
