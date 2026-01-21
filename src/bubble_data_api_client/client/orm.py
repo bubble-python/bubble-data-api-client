@@ -25,12 +25,27 @@ class BubbleBaseModel(PydanticBaseModel):
         cls._typename = typename
 
     @classmethod
+    def _resolve_aliases(cls, data: dict[str, typing.Any]) -> dict[str, typing.Any]:
+        """Translate ORM field names to their aliases for API requests."""
+        resolved: dict[str, typing.Any] = {}
+        for field_name, value in data.items():
+            field_info = cls.model_fields.get(field_name)
+            if field_info is None:
+                raise UnknownFieldError(field_name)
+            if field_info.alias:
+                resolved[field_info.alias] = value
+            else:
+                resolved[field_name] = value
+        return resolved
+
+    @classmethod
     async def create(cls, **data: typing.Any) -> typing.Self:
+        aliased_data = cls._resolve_aliases(data)
         async with _get_client() as client:
-            response = await client.create(cls._typename, data)
+            response = await client.create(cls._typename, aliased_data)
             response.raise_for_status()
             uid = response.json()["id"]
-            return cls(**data, **{BubbleField.ID: uid})
+            return cls(**aliased_data, **{BubbleField.ID: uid})
 
     @classmethod
     async def get(cls, uid: str) -> typing.Self | None:
@@ -64,16 +79,7 @@ class BubbleBaseModel(PydanticBaseModel):
     @classmethod
     async def update(cls, uid: str, **data: typing.Any) -> None:
         """Update specific fields on a thing by its unique ID."""
-        aliased_data: dict[str, typing.Any] = {}
-        for field_name, value in data.items():
-            field_info = cls.model_fields.get(field_name)
-            if field_info is None:
-                raise UnknownFieldError(field_name)
-            if field_info.alias:
-                aliased_data[field_info.alias] = value
-            else:
-                aliased_data[field_name] = value
-
+        aliased_data = cls._resolve_aliases(data)
         async with _get_client() as client:
             response = await client.update(cls._typename, uid, aliased_data)
             response.raise_for_status()
@@ -135,13 +141,15 @@ class BubbleBaseModel(PydanticBaseModel):
         on_multiple: OnMultiple,
     ) -> tuple[typing.Self, bool]:
         """Create a thing if it doesn't exist, or update if it does."""
+        aliased_match = cls._resolve_aliases(match)
+        aliased_data = cls._resolve_aliases(data)
         async with _get_client() as client:
             result = await client.create_or_update(
                 typename=cls._typename,
-                match=match,
-                data=data,
+                match=aliased_match,
+                data=aliased_data,
                 on_multiple=on_multiple,
             )
-            # construct instance from input data, similar to create()
+            # construct instance from aliased data
             # server-side fields like Modified Date won't be populated
-            return cls(**match, **data, **{BubbleField.ID: result["uids"][0]}), result["created"]
+            return cls(**aliased_match, **aliased_data, **{BubbleField.ID: result["uids"][0]}), result["created"]
