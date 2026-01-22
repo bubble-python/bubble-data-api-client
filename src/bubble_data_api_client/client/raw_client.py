@@ -161,8 +161,10 @@ class RawClient:
         # - ERROR: raise MultipleMatchesError
         # - UPDATE_FIRST: update the first match (arbitrary order)
         # - UPDATE_ALL: update all matches (N API calls, no bulk update in Bubble)
-        # - DEDUPE_OLDEST: delete all but oldest, update oldest (N API calls)
-        # - DEDUPE_NEWEST: delete all but newest, update newest (N API calls)
+        # - DEDUPE_OLDEST_CREATED: delete all but oldest by created date (N API calls)
+        # - DEDUPE_NEWEST_CREATED: delete all but newest by created date (N API calls)
+        # - DEDUPE_OLDEST_MODIFIED: delete all but oldest by modified date (N API calls)
+        # - DEDUPE_NEWEST_MODIFIED: delete all but newest by modified date (N API calls)
 
         if on_multiple not in OnMultiple:
             raise InvalidOnMultipleError(on_multiple)
@@ -182,12 +184,15 @@ class RawClient:
             constraint(key=key, constraint_type=ConstraintType.EQUALS, value=value) for key, value in match.items()
         ]
 
-        # for dedupe strategies, sort by created date to determine oldest/newest
+        # for dedupe strategies, sort by date to determine oldest/newest
         sort_field: str | None = None
         descending: bool | None = None
-        if on_multiple in (OnMultiple.DEDUPE_OLDEST, OnMultiple.DEDUPE_NEWEST):
+        if on_multiple in (OnMultiple.DEDUPE_OLDEST_CREATED, OnMultiple.DEDUPE_NEWEST_CREATED):
             sort_field = BubbleField.CREATED_DATE
-            descending = on_multiple == OnMultiple.DEDUPE_NEWEST
+            descending = on_multiple == OnMultiple.DEDUPE_NEWEST_CREATED
+        elif on_multiple in (OnMultiple.DEDUPE_OLDEST_MODIFIED, OnMultiple.DEDUPE_NEWEST_MODIFIED):
+            sort_field = BubbleField.MODIFIED_DATE
+            descending = on_multiple == OnMultiple.DEDUPE_NEWEST_MODIFIED
 
         response = await self.find(
             typename=typename,
@@ -249,7 +254,12 @@ class RawClient:
                     )
                 return {"uids": uids, "created": False}
 
-            case OnMultiple.DEDUPE_OLDEST | OnMultiple.DEDUPE_NEWEST:
+            case (
+                OnMultiple.DEDUPE_OLDEST_CREATED
+                | OnMultiple.DEDUPE_NEWEST_CREATED
+                | OnMultiple.DEDUPE_OLDEST_MODIFIED
+                | OnMultiple.DEDUPE_NEWEST_MODIFIED
+            ):
                 # first result is the one to keep (already sorted)
                 keep_uid = results[0][BubbleField.ID]
                 delete_uids = [r[BubbleField.ID] for r in results[1:]]

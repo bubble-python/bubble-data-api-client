@@ -176,8 +176,8 @@ async def test_create_or_update_update_all(configured_client: None) -> None:
 
 
 @respx.mock
-async def test_create_or_update_dedupe_oldest(configured_client: None) -> None:
-    """Test that DEDUPE_OLDEST keeps oldest and deletes others."""
+async def test_create_or_update_dedupe_oldest_created(configured_client: None) -> None:
+    """Test that DEDUPE_OLDEST_CREATED keeps oldest by created date and deletes others."""
     # find returns results sorted by Created Date ascending (oldest first)
     respx.get("https://test.example.com/customer").mock(
         return_value=httpx.Response(
@@ -200,7 +200,7 @@ async def test_create_or_update_dedupe_oldest(configured_client: None) -> None:
             typename="customer",
             match={"external_id": "abc"},
             data={"name": "John"},
-            on_multiple=OnMultiple.DEDUPE_OLDEST,
+            on_multiple=OnMultiple.DEDUPE_OLDEST_CREATED,
         )
 
     assert result["created"] is False
@@ -211,8 +211,8 @@ async def test_create_or_update_dedupe_oldest(configured_client: None) -> None:
 
 
 @respx.mock
-async def test_create_or_update_dedupe_newest(configured_client: None) -> None:
-    """Test that DEDUPE_NEWEST keeps newest and deletes others."""
+async def test_create_or_update_dedupe_newest_created(configured_client: None) -> None:
+    """Test that DEDUPE_NEWEST_CREATED keeps newest by created date and deletes others."""
     # find returns results sorted by Created Date descending (newest first)
     respx.get("https://test.example.com/customer").mock(
         return_value=httpx.Response(
@@ -235,11 +235,81 @@ async def test_create_or_update_dedupe_newest(configured_client: None) -> None:
             typename="customer",
             match={"external_id": "abc"},
             data={"name": "John"},
-            on_multiple=OnMultiple.DEDUPE_NEWEST,
+            on_multiple=OnMultiple.DEDUPE_NEWEST_CREATED,
         )
 
     assert result["created"] is False
     assert result["uids"] == ["newest"]
+    assert delete_newer.call_count == 1
+    assert delete_oldest.call_count == 1
+    assert update_newest.call_count == 1
+
+
+@respx.mock
+async def test_create_or_update_dedupe_oldest_modified(configured_client: None) -> None:
+    """Test that DEDUPE_OLDEST_MODIFIED keeps oldest by modified date and deletes others."""
+    # find returns results sorted by Modified Date ascending (least recently modified first)
+    respx.get("https://test.example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "oldest_mod"}, {"_id": "newer_mod"}, {"_id": "newest_mod"}],
+                    "count": 3,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+    delete_newer = respx.delete("https://test.example.com/customer/newer_mod").mock(return_value=httpx.Response(204))
+    delete_newest = respx.delete("https://test.example.com/customer/newest_mod").mock(return_value=httpx.Response(204))
+    update_oldest = respx.patch("https://test.example.com/customer/oldest_mod").mock(return_value=httpx.Response(204))
+
+    async with RawClient() as client:
+        result = await client.create_or_update(
+            typename="customer",
+            match={"external_id": "abc"},
+            data={"name": "John"},
+            on_multiple=OnMultiple.DEDUPE_OLDEST_MODIFIED,
+        )
+
+    assert result["created"] is False
+    assert result["uids"] == ["oldest_mod"]
+    assert delete_newer.call_count == 1
+    assert delete_newest.call_count == 1
+    assert update_oldest.call_count == 1
+
+
+@respx.mock
+async def test_create_or_update_dedupe_newest_modified(configured_client: None) -> None:
+    """Test that DEDUPE_NEWEST_MODIFIED keeps newest by modified date and deletes others."""
+    # find returns results sorted by Modified Date descending (most recently modified first)
+    respx.get("https://test.example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "newest_mod"}, {"_id": "newer_mod"}, {"_id": "oldest_mod"}],
+                    "count": 3,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+    delete_newer = respx.delete("https://test.example.com/customer/newer_mod").mock(return_value=httpx.Response(204))
+    delete_oldest = respx.delete("https://test.example.com/customer/oldest_mod").mock(return_value=httpx.Response(204))
+    update_newest = respx.patch("https://test.example.com/customer/newest_mod").mock(return_value=httpx.Response(204))
+
+    async with RawClient() as client:
+        result = await client.create_or_update(
+            typename="customer",
+            match={"external_id": "abc"},
+            data={"name": "John"},
+            on_multiple=OnMultiple.DEDUPE_NEWEST_MODIFIED,
+        )
+
+    assert result["created"] is False
+    assert result["uids"] == ["newest_mod"]
     assert delete_newer.call_count == 1
     assert delete_oldest.call_count == 1
     assert update_newest.call_count == 1
@@ -348,7 +418,7 @@ async def test_create_or_update_dedupe_partial_delete_failure(configured_client:
                 typename="customer",
                 match={"external_id": "abc"},
                 data={"name": "John"},
-                on_multiple=OnMultiple.DEDUPE_OLDEST,
+                on_multiple=OnMultiple.DEDUPE_OLDEST_CREATED,
             )
 
     error = exc_info.value

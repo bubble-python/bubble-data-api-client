@@ -24,8 +24,10 @@ class OnMultiple(StrEnum):
     ERROR = "error"
     UPDATE_ALL = "update_all"
     UPDATE_FIRST = "update_first"
-    DEDUPE_OLDEST = "dedupe_oldest"
-    DEDUPE_NEWEST = "dedupe_newest"
+    DEDUPE_OLDEST_CREATED = "dedupe_oldest_created"
+    DEDUPE_NEWEST_CREATED = "dedupe_newest_created"
+    DEDUPE_OLDEST_MODIFIED = "dedupe_oldest_modified"
+    DEDUPE_NEWEST_MODIFIED = "dedupe_newest_modified"
 
 
 class CreateOrUpdateResult(TypedDict):
