@@ -163,19 +163,23 @@ class BubbleModel(PydanticBaseModel):
         cls,
         *,
         match: dict[str, typing.Any],
-        data: dict[str, typing.Any],
+        create_data: dict[str, typing.Any] | None = None,
+        update_data: dict[str, typing.Any] | None = None,
         on_multiple: OnMultiple,
     ) -> tuple[typing.Self, bool]:
         """Create a thing if it doesn't exist, or update if it does."""
         aliased_match = cls._resolve_aliases(match)
-        aliased_data = cls._resolve_aliases(data)
+        aliased_create_data = cls._resolve_aliases(create_data) if create_data else None
+        aliased_update_data = cls._resolve_aliases(update_data) if update_data else None
         async with _get_client() as client:
             result = await client.create_or_update(
                 typename=cls._typename,
                 match=aliased_match,
-                data=aliased_data,
+                create_data=aliased_create_data,
+                update_data=aliased_update_data,
                 on_multiple=on_multiple,
             )
             # construct instance from aliased data
             # server-side fields like Modified Date won't be populated
-            return cls(**aliased_match, **aliased_data, **{BubbleField.ID: result["uids"][0]}), result["created"]
+            instance_data = (aliased_create_data or {}) if result["created"] else (aliased_update_data or {})
+            return cls(**aliased_match, **instance_data, **{BubbleField.ID: result["uids"][0]}), result["created"]

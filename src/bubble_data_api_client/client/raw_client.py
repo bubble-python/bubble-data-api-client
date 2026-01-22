@@ -147,7 +147,8 @@ class RawClient:
         typename: str,
         *,
         match: dict[str, typing.Any],
-        data: dict[str, typing.Any],
+        create_data: dict[str, typing.Any] | None = None,
+        update_data: dict[str, typing.Any] | None = None,
         on_multiple: OnMultiple,
     ) -> CreateOrUpdateResult:
         """Create a thing if it doesn't exist, or update if it does."""
@@ -174,9 +175,9 @@ class RawClient:
             msg = "match cannot be empty"
             raise ValueError(msg)
 
-        # empty data means nothing to update/set beyond match fields
-        if not data:
-            msg = "data cannot be empty"
+        # at least one of create_data or update_data must be provided
+        if not create_data and not update_data:
+            msg = "at least one of create_data or update_data must be provided"
             raise ValueError(msg)
 
         # build equals constraints from match fields to find existing thing
@@ -204,17 +205,18 @@ class RawClient:
 
         # no matches: create new thing
         if not results:
-            create_data = {**match, **data}
-            response = await self.create(typename=typename, data=create_data)
+            merged_create_data = {**match, **(create_data or {})}
+            response = await self.create(typename=typename, data=merged_create_data)
             response.raise_for_status()
             uid: str = response.json()["id"]
             return {"uids": [uid], "created": True}
 
-        # single match: update it
+        # single match: update it (or skip if no update_data)
         if len(results) == 1:
             uid = results[0][BubbleField.ID]
-            response = await self.update(typename=typename, uid=uid, data=data)
-            response.raise_for_status()
+            if update_data:
+                response = await self.update(typename=typename, uid=uid, data=update_data)
+                response.raise_for_status()
             return {"uids": [uid], "created": False}
 
         # multiple matches: handle according to strategy
@@ -224,34 +226,36 @@ class RawClient:
 
             case OnMultiple.UPDATE_FIRST:
                 uid = results[0][BubbleField.ID]
-                response = await self.update(typename=typename, uid=uid, data=data)
-                response.raise_for_status()
+                if update_data:
+                    response = await self.update(typename=typename, uid=uid, data=update_data)
+                    response.raise_for_status()
                 return {"uids": [uid], "created": False}
 
             case OnMultiple.UPDATE_ALL:
                 # bubble does not support bulk PATCH, so we update concurrently
                 uids = [result[BubbleField.ID] for result in results]
-                results_or_errors = await asyncio.gather(
-                    *[self.update(typename=typename, uid=uid, data=data) for uid in uids],
-                    return_exceptions=True,
-                )
-
-                # check for failures, letting all operations complete before raising
-                succeeded: list[str] = []
-                failed: list[tuple[str, BaseException]] = []
-                for uid, item in zip(uids, results_or_errors, strict=True):
-                    if isinstance(item, BaseException):
-                        failed.append((uid, item))
-                    else:
-                        item.raise_for_status()
-                        succeeded.append(uid)
-
-                if failed:
-                    raise PartialFailureError(
-                        operation="update",
-                        succeeded=succeeded,
-                        failed=failed,
+                if update_data:
+                    results_or_errors = await asyncio.gather(
+                        *[self.update(typename=typename, uid=uid, data=update_data) for uid in uids],
+                        return_exceptions=True,
                     )
+
+                    # check for failures, letting all operations complete before raising
+                    succeeded: list[str] = []
+                    failed: list[tuple[str, BaseException]] = []
+                    for uid, item in zip(uids, results_or_errors, strict=True):
+                        if isinstance(item, BaseException):
+                            failed.append((uid, item))
+                        else:
+                            item.raise_for_status()
+                            succeeded.append(uid)
+
+                    if failed:
+                        raise PartialFailureError(
+                            operation="update",
+                            succeeded=succeeded,
+                            failed=failed,
+                        )
                 return {"uids": uids, "created": False}
 
             case (
@@ -265,8 +269,9 @@ class RawClient:
                 delete_uids = [r[BubbleField.ID] for r in results[1:]]
 
                 # update first so data is preserved even if deletes fail
-                response = await self.update(typename=typename, uid=keep_uid, data=data)
-                response.raise_for_status()
+                if update_data:
+                    response = await self.update(typename=typename, uid=keep_uid, data=update_data)
+                    response.raise_for_status()
 
                 # delete duplicates concurrently, letting all complete before checking errors
                 delete_results = await asyncio.gather(

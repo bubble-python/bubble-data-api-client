@@ -136,7 +136,7 @@ async def test_create_or_update_translates_match_aliases(configured_client: None
 
     _order, created = await Order.create_or_update(
         match={"external_id": "ext-001"},
-        data={"company": "Acme Corp"},
+        create_data={"company": "Acme Corp"},
         on_multiple=OnMultiple.ERROR,
     )
 
@@ -171,7 +171,7 @@ async def test_create_or_update_translates_data_aliases(configured_client: None)
 
     _order, created = await Order.create_or_update(
         match={"external_id": "ext-001"},
-        data={"company": "Updated Corp"},
+        update_data={"company": "Updated Corp"},
         on_multiple=OnMultiple.ERROR,
     )
 
@@ -191,7 +191,7 @@ async def test_create_or_update_raises_for_unknown_match_field() -> None:
     with pytest.raises(UnknownFieldError, match="unknown field: nonexistent"):
         await User.create_or_update(
             match={"nonexistent": "value"},
-            data={"name": "test"},
+            update_data={"name": "test"},
             on_multiple=OnMultiple.ERROR,
         )
 
@@ -206,6 +206,6 @@ async def test_create_or_update_raises_for_unknown_data_field() -> None:
     with pytest.raises(UnknownFieldError, match="unknown field: nonexistent"):
         await User.create_or_update(
             match={"name": "test"},
-            data={"nonexistent": "value"},
+            update_data={"nonexistent": "value"},
             on_multiple=OnMultiple.ERROR,
         )

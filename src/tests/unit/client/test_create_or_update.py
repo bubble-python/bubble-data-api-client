@@ -45,7 +45,7 @@ async def test_create_or_update_creates_when_no_match(configured_client: None) -
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            create_data={"name": "John"},
             on_multiple=OnMultiple.ERROR,
         )
 
@@ -53,6 +53,86 @@ async def test_create_or_update_creates_when_no_match(configured_client: None) -
     assert result["uids"] == ["123x456"]
     assert find_route.call_count == 1
     assert create_route.call_count == 1
+
+
+@respx.mock
+async def test_create_or_update_with_both_create_and_update_data_creates(configured_client: None) -> None:
+    """Test that create_data is used when creating, not update_data."""
+    import json
+
+    respx.get("https://test.example.com/customer").mock(
+        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    )
+    create_route = respx.post("https://test.example.com/customer").mock(
+        return_value=httpx.Response(200, json={"status": "success", "id": "new123"})
+    )
+
+    async with RawClient() as client:
+        result = await client.create_or_update(
+            typename="customer",
+            match={"external_id": "abc"},
+            create_data={"status": "new", "created_by": "system"},
+            update_data={"status": "active", "last_seen": "2024-01-01"},
+            on_multiple=OnMultiple.ERROR,
+        )
+
+    assert result["created"] is True
+    assert result["uids"] == ["new123"]
+    # verify create was called with match + create_data (not update_data)
+    request_body = json.loads(create_route.calls[0].request.content)
+    assert request_body == {"external_id": "abc", "status": "new", "created_by": "system"}
+
+
+@respx.mock
+async def test_create_or_update_with_both_create_and_update_data_updates(configured_client: None) -> None:
+    """Test that update_data is used when updating, not create_data."""
+    import json
+
+    respx.get("https://test.example.com/customer").mock(
+        return_value=httpx.Response(
+            200, json={"response": {"results": [{"_id": "existing123"}], "count": 1, "remaining": 0}}
+        )
+    )
+    update_route = respx.patch("https://test.example.com/customer/existing123").mock(return_value=httpx.Response(204))
+
+    async with RawClient() as client:
+        result = await client.create_or_update(
+            typename="customer",
+            match={"external_id": "abc"},
+            create_data={"status": "new", "created_by": "system"},
+            update_data={"status": "active", "last_seen": "2024-01-01"},
+            on_multiple=OnMultiple.ERROR,
+        )
+
+    assert result["created"] is False
+    assert result["uids"] == ["existing123"]
+    # verify update was called with update_data (not create_data)
+    request_body = json.loads(update_route.calls[0].request.content)
+    assert request_body == {"status": "active", "last_seen": "2024-01-01"}
+
+
+@respx.mock
+async def test_create_or_update_with_only_create_data_skips_update(configured_client: None) -> None:
+    """Test that when only create_data is provided, updates are skipped."""
+    find_route = respx.get("https://test.example.com/customer").mock(
+        return_value=httpx.Response(
+            200, json={"response": {"results": [{"_id": "existing123"}], "count": 1, "remaining": 0}}
+        )
+    )
+    # no update route - should not be called
+
+    async with RawClient() as client:
+        result = await client.create_or_update(
+            typename="customer",
+            match={"external_id": "abc"},
+            create_data={"status": "new"},
+            on_multiple=OnMultiple.ERROR,
+        )
+
+    assert result["created"] is False
+    assert result["uids"] == ["existing123"]
+    assert find_route.call_count == 1
+    # no PATCH call should have been made
 
 
 @respx.mock
@@ -71,7 +151,7 @@ async def test_create_or_update_updates_when_single_match(configured_client: Non
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            update_data={"name": "John"},
             on_multiple=OnMultiple.ERROR,
         )
 
@@ -103,7 +183,7 @@ async def test_create_or_update_error_on_multiple_matches(configured_client: Non
             await client.create_or_update(
                 typename="customer",
                 match={"external_id": "abc"},
-                data={"name": "John"},
+                update_data={"name": "John"},
                 on_multiple=OnMultiple.ERROR,
             )
 
@@ -132,7 +212,7 @@ async def test_create_or_update_update_first(configured_client: None) -> None:
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            update_data={"name": "John"},
             on_multiple=OnMultiple.UPDATE_FIRST,
         )
 
@@ -164,7 +244,7 @@ async def test_create_or_update_update_all(configured_client: None) -> None:
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            update_data={"name": "John"},
             on_multiple=OnMultiple.UPDATE_ALL,
         )
 
@@ -199,7 +279,7 @@ async def test_create_or_update_dedupe_oldest_created(configured_client: None) -
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            update_data={"name": "John"},
             on_multiple=OnMultiple.DEDUPE_OLDEST_CREATED,
         )
 
@@ -234,7 +314,7 @@ async def test_create_or_update_dedupe_newest_created(configured_client: None) -
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            update_data={"name": "John"},
             on_multiple=OnMultiple.DEDUPE_NEWEST_CREATED,
         )
 
@@ -269,7 +349,7 @@ async def test_create_or_update_dedupe_oldest_modified(configured_client: None) 
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            update_data={"name": "John"},
             on_multiple=OnMultiple.DEDUPE_OLDEST_MODIFIED,
         )
 
@@ -304,7 +384,7 @@ async def test_create_or_update_dedupe_newest_modified(configured_client: None) 
         result = await client.create_or_update(
             typename="customer",
             match={"external_id": "abc"},
-            data={"name": "John"},
+            update_data={"name": "John"},
             on_multiple=OnMultiple.DEDUPE_NEWEST_MODIFIED,
         )
 
@@ -322,7 +402,7 @@ async def test_create_or_update_invalid_on_multiple(configured_client: None) -> 
             await client.create_or_update(
                 typename="customer",
                 match={"external_id": "abc"},
-                data={"name": "John"},
+                update_data={"name": "John"},
                 on_multiple="invalid",  # type: ignore[arg-type]
             )
 
@@ -334,19 +414,18 @@ async def test_create_or_update_empty_match_raises(configured_client: None) -> N
             await client.create_or_update(
                 typename="customer",
                 match={},
-                data={"name": "John"},
+                update_data={"name": "John"},
                 on_multiple=OnMultiple.ERROR,
             )
 
 
-async def test_create_or_update_empty_data_raises(configured_client: None) -> None:
-    """Test that empty data dict raises ValueError."""
+async def test_create_or_update_no_data_raises(configured_client: None) -> None:
+    """Test that no data provided raises ValueError."""
     async with RawClient() as client:
-        with pytest.raises(ValueError, match="data cannot be empty"):
+        with pytest.raises(ValueError, match="at least one of create_data or update_data must be provided"):
             await client.create_or_update(
                 typename="customer",
                 match={"external_id": "abc"},
-                data={},
                 on_multiple=OnMultiple.ERROR,
             )
 
@@ -378,7 +457,7 @@ async def test_create_or_update_update_all_partial_failure(configured_client: No
             await client.create_or_update(
                 typename="customer",
                 match={"external_id": "abc"},
-                data={"name": "John"},
+                update_data={"name": "John"},
                 on_multiple=OnMultiple.UPDATE_ALL,
             )
 
@@ -417,7 +496,7 @@ async def test_create_or_update_dedupe_partial_delete_failure(configured_client:
             await client.create_or_update(
                 typename="customer",
                 match={"external_id": "abc"},
-                data={"name": "John"},
+                update_data={"name": "John"},
                 on_multiple=OnMultiple.DEDUPE_OLDEST_CREATED,
             )
 
