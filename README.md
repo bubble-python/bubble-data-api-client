@@ -27,10 +27,17 @@ user = await User.create(name="Ada", email="ada@example.com")
 # retrieve
 user = await User.get(uid)
 
-# query
+# query (paginated)
 users = await User.find(constraints=[
     constraint("status", ConstraintType.EQUALS, "active")
 ])
+
+# query all matching records
+all_users = await User.find_all()
+
+# iterate with constant memory
+async for user in User.find_iter():
+    process(user)
 
 # update
 user.name = "Ada Lovelace"
@@ -113,6 +120,7 @@ HTTP connections are pooled per event loop, avoiding reconnection overhead when 
 - **Pydantic ORM:** define models once, get validation and autocomplete
 - **Connection pooling:** automatic per-event-loop client reuse
 - **Rich query constraints:** pythonic filtering using Bubble's constraint system
+- **Efficient iteration:** `find_iter()` streams records with constant memory
 - **Upsert with duplicate handling:** `create_or_update` with configurable strategies
 - **Configurable retries:** plug in your own retry policy via `tenacity`
 - **UID validation:** catch invalid Bubble IDs at the model level
@@ -179,13 +187,22 @@ user = await User.create(name="Ada Lovelace", email="ada@example.com")
 # retrieve
 user = await User.get("1234567890x1234567890")
 
-# query with constraints
+# query with constraints (single page)
 from bubble_data_api_client import constraint, ConstraintType
 
 active_users = await User.find(constraints=[
     constraint("status", ConstraintType.EQUALS, "active"),
     constraint("age", ConstraintType.GREATER_THAN, 18),
 ])
+
+# get all matching records as a list
+all_active = await User.find_all(constraints=[
+    constraint("status", ConstraintType.EQUALS, "active"),
+])
+
+# iterate through all records with constant memory
+async for user in User.find_iter():
+    print(user.name)
 
 # update
 user.name = "Ada L."
@@ -202,13 +219,13 @@ The `create_or_update` method handles the common "upsert" pattern with configura
 ```python
 from bubble_data_api_client import OnMultiple
 
-# basic upsert - match by external_id, create if not found
+# basic upsert, matches by external_id and creates if not found
 user, created = await User.create_or_update(
     match={"external_id": "ext-123"},
     data={"name": "Updated Name", "email": "new@example.com"},
     on_multiple=OnMultiple.ERROR,
 )
-# returns (User, bool) - the model instance and whether it was created
+# returns (User, bool): the instance and whether it was created
 ```
 
 ### Duplicate Handling Strategies
@@ -251,6 +268,32 @@ results = await User.find(constraints=constraints)
 ```
 
 Available constraint types: `EQUALS`, `NOT_EQUAL`, `IS_EMPTY` (any field), `IS_NOT_EMPTY` (any field), `TEXT_CONTAINS`, `NOT_TEXT_CONTAINS`, `GREATER_THAN`, `LESS_THAN`, `IN`, `NOT_IN`, `CONTAINS`, `NOT_CONTAINS`, `EMPTY` (list fields), `NOT_EMPTY` (list fields), `GEOGRAPHIC_SEARCH`.
+
+## Querying Records
+
+Three methods for fetching records, depending on your needs:
+
+| Method | Returns | Use case |
+|--------|---------|----------|
+| `find()` | `list` | Single page with manual pagination via `cursor`/`limit` |
+| `find_all()` | `list` | All matching records collected into memory |
+| `find_iter()` | `AsyncIterator` | All matching records with constant memory |
+
+```python
+# find(): single page, you control pagination
+page1 = await User.find(limit=100)
+page2 = await User.find(limit=100, cursor=100)
+
+# find_all(): fetches all pages, returns when complete
+all_users = await User.find_all(constraints=[...])
+print(f"Got {len(all_users)} users")
+
+# find_iter(): streams records with constant memory
+async for user in User.find_iter(constraints=[...]):
+    await process(user)  # each record processed as it arrives
+```
+
+Both `find_all()` and `find_iter()` handle pagination internally, fetching pages of `page_size` (default 100) until all records are retrieved.
 
 ## Type-Safe Bubble UIDs
 

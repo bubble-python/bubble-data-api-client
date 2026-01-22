@@ -209,3 +209,141 @@ async def test_create_or_update_raises_for_unknown_data_field() -> None:
             update_data={"nonexistent": "value"},
             on_multiple=OnMultiple.ERROR,
         )
+
+
+@respx.mock
+async def test_find_iter_single_page(configured_client: None) -> None:
+    """Verify find_iter yields all items from a single page."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    respx.get("https://example.com/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [
+                        {"_id": "1", "name": "Alice"},
+                        {"_id": "2", "name": "Bob"},
+                    ],
+                    "count": 2,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+
+    users = [user async for user in User.find_iter()]
+
+    assert len(users) == 2
+    assert users[0].uid == "1"
+    assert users[0].name == "Alice"
+    assert users[1].uid == "2"
+    assert users[1].name == "Bob"
+
+
+@respx.mock
+async def test_find_iter_multiple_pages(configured_client: None) -> None:
+    """Verify find_iter fetches all pages and yields items from each."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    route = respx.get("https://example.com/user")
+    route.side_effect = [
+        httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "1", "name": "Alice"}],
+                    "count": 1,
+                    "remaining": 2,
+                }
+            },
+        ),
+        httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "2", "name": "Bob"}],
+                    "count": 1,
+                    "remaining": 1,
+                }
+            },
+        ),
+        httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "3", "name": "Charlie"}],
+                    "count": 1,
+                    "remaining": 0,
+                }
+            },
+        ),
+    ]
+
+    users = [user async for user in User.find_iter(page_size=1)]
+
+    assert len(users) == 3
+    assert [u.name for u in users] == ["Alice", "Bob", "Charlie"]
+    assert route.call_count == 3
+
+
+@respx.mock
+async def test_find_iter_empty_results(configured_client: None) -> None:
+    """Verify find_iter handles empty results."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    respx.get("https://example.com/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={"response": {"results": [], "count": 0, "remaining": 0}},
+        )
+    )
+
+    users = [user async for user in User.find_iter()]
+
+    assert users == []
+
+
+@respx.mock
+async def test_find_all_returns_list(configured_client: None) -> None:
+    """Verify find_all returns all items as a list."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    route = respx.get("https://example.com/user")
+    route.side_effect = [
+        httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "1", "name": "Alice"}],
+                    "count": 1,
+                    "remaining": 1,
+                }
+            },
+        ),
+        httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "2", "name": "Bob"}],
+                    "count": 1,
+                    "remaining": 0,
+                }
+            },
+        ),
+    ]
+
+    users = await User.find_all(page_size=1)
+
+    assert isinstance(users, list)
+    assert len(users) == 2
+    assert users[0].name == "Alice"
+    assert users[1].name == "Bob"

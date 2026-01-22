@@ -1,12 +1,13 @@
 import http
 import typing
+from collections.abc import AsyncIterator
 from datetime import datetime
 
 import httpx
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
-from bubble_data_api_client.client.raw_client import RawClient
+from bubble_data_api_client.client.raw_client import AdditionalSortField, RawClient
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.exceptions import UnknownFieldError
 from bubble_data_api_client.types import BubbleField, OnMultiple
@@ -125,7 +126,7 @@ class BubbleModel(PydanticBaseModel):
         sort_field: str | None = None,
         descending: bool | None = None,
         exclude_remaining: bool | None = None,
-        additional_sort_fields: list | None = None,
+        additional_sort_fields: list[AdditionalSortField] | None = None,
     ) -> list[typing.Self]:
         async with _get_client() as client:
             response = await client.find(
@@ -140,6 +141,59 @@ class BubbleModel(PydanticBaseModel):
             )
             response.raise_for_status()
             return [cls(**item) for item in response.json()["response"]["results"]]
+
+    @classmethod
+    async def find_iter(
+        cls,
+        *,
+        constraints: list[Constraint] | None = None,
+        page_size: int = 100,
+        sort_field: str | None = None,
+        descending: bool | None = None,
+        additional_sort_fields: list[AdditionalSortField] | None = None,
+    ) -> AsyncIterator[typing.Self]:
+        """Iterate through all matching records with constant memory usage."""
+        cursor: int = 0
+        async with _get_client() as client:
+            while True:
+                response = await client.find(
+                    cls._typename,
+                    constraints=constraints,
+                    cursor=cursor,
+                    limit=page_size,
+                    sort_field=sort_field,
+                    descending=descending,
+                    additional_sort_fields=additional_sort_fields,
+                )
+                response.raise_for_status()
+                body = response.json()["response"]
+                for item in body["results"]:
+                    yield cls(**item)
+                if body["remaining"] == 0:
+                    break
+                cursor += len(body["results"])
+
+    @classmethod
+    async def find_all(
+        cls,
+        *,
+        constraints: list[Constraint] | None = None,
+        page_size: int = 100,
+        sort_field: str | None = None,
+        descending: bool | None = None,
+        additional_sort_fields: list[AdditionalSortField] | None = None,
+    ) -> list[typing.Self]:
+        """Return all matching records as a list."""
+        return [
+            item
+            async for item in cls.find_iter(
+                constraints=constraints,
+                page_size=page_size,
+                sort_field=sort_field,
+                descending=descending,
+                additional_sort_fields=additional_sort_fields,
+            )
+        ]
 
     @classmethod
     async def count(cls, *, constraints: list[Constraint] | None = None) -> int:
