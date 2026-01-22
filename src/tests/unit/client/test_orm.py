@@ -5,14 +5,14 @@ import pytest
 import respx
 from pydantic import Field
 
-from bubble_data_api_client.client.orm import BubbleBaseModel
+from bubble_data_api_client.client.orm import BubbleModel
 from bubble_data_api_client.exceptions import UnknownFieldError
 
 
 def test_model_instantiation():
     """Tests that the Pydantic model can be instantiated."""
 
-    class User(BubbleBaseModel, typename="user"):
+    class User(BubbleModel, typename="user"):
         name: str
 
     # instantiate the model, no client is needed
@@ -26,7 +26,7 @@ def test_model_instantiation():
 async def test_save_uses_field_aliases(configured_client: None) -> None:
     """Verify save() sends Bubble aliases, not Python field names."""
 
-    class Order(BubbleBaseModel, typename="order"):
+    class Order(BubbleModel, typename="order"):
         company: str = Field(alias="Buying company")
 
     order = Order(**{"Buying company": "Acme Corp", "_id": "abc123"})
@@ -44,7 +44,7 @@ async def test_save_uses_field_aliases(configured_client: None) -> None:
 async def test_update_single_field(configured_client: None) -> None:
     """Verify update() sends only the specified field."""
 
-    class User(BubbleBaseModel, typename="user"):
+    class User(BubbleModel, typename="user"):
         name: str
         email: str
 
@@ -61,7 +61,7 @@ async def test_update_single_field(configured_client: None) -> None:
 async def test_update_translates_field_aliases(configured_client: None) -> None:
     """Verify update() translates Python field names to Bubble aliases."""
 
-    class Order(BubbleBaseModel, typename="order"):
+    class Order(BubbleModel, typename="order"):
         company: str = Field(alias="Buying company")
         status: str
 
@@ -77,7 +77,7 @@ async def test_update_translates_field_aliases(configured_client: None) -> None:
 async def test_update_raises_for_unknown_field() -> None:
     """Verify update() raises UnknownFieldError for fields not in the model."""
 
-    class User(BubbleBaseModel, typename="user"):
+    class User(BubbleModel, typename="user"):
         name: str
 
     with pytest.raises(UnknownFieldError, match="unknown field: nonexistent"):
@@ -88,7 +88,7 @@ async def test_update_raises_for_unknown_field() -> None:
 async def test_create_translates_field_aliases(configured_client: None) -> None:
     """Verify create() translates Python field names to Bubble aliases."""
 
-    class Order(BubbleBaseModel, typename="order"):
+    class Order(BubbleModel, typename="order"):
         company: str = Field(alias="Buying company")
         status: str
 
@@ -109,7 +109,7 @@ async def test_create_translates_field_aliases(configured_client: None) -> None:
 async def test_create_raises_for_unknown_field() -> None:
     """Verify create() raises UnknownFieldError for fields not in the model."""
 
-    class User(BubbleBaseModel, typename="user"):
+    class User(BubbleModel, typename="user"):
         name: str
 
     with pytest.raises(UnknownFieldError, match="unknown field: nonexistent"):
@@ -121,7 +121,7 @@ async def test_create_or_update_translates_match_aliases(configured_client: None
     """Verify create_or_update() translates match field names to Bubble aliases."""
     from bubble_data_api_client.types import OnMultiple
 
-    class Order(BubbleBaseModel, typename="order"):
+    class Order(BubbleModel, typename="order"):
         external_id: str = Field(alias="External ID")
         company: str = Field(alias="Buying company")
 
@@ -156,7 +156,7 @@ async def test_create_or_update_translates_data_aliases(configured_client: None)
     """Verify create_or_update() translates data field names to Bubble aliases."""
     from bubble_data_api_client.types import OnMultiple
 
-    class Order(BubbleBaseModel, typename="order"):
+    class Order(BubbleModel, typename="order"):
         external_id: str = Field(alias="External ID")
         company: str = Field(alias="Buying company")
 
@@ -185,7 +185,7 @@ async def test_create_or_update_raises_for_unknown_match_field() -> None:
     """Verify create_or_update() raises UnknownFieldError for unknown match fields."""
     from bubble_data_api_client.types import OnMultiple
 
-    class User(BubbleBaseModel, typename="user"):
+    class User(BubbleModel, typename="user"):
         name: str
 
     with pytest.raises(UnknownFieldError, match="unknown field: nonexistent"):
@@ -200,7 +200,7 @@ async def test_create_or_update_raises_for_unknown_data_field() -> None:
     """Verify create_or_update() raises UnknownFieldError for unknown data fields."""
     from bubble_data_api_client.types import OnMultiple
 
-    class User(BubbleBaseModel, typename="user"):
+    class User(BubbleModel, typename="user"):
         name: str
 
     with pytest.raises(UnknownFieldError, match="unknown field: nonexistent"):

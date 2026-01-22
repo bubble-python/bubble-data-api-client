@@ -1,4 +1,4 @@
-from bubble_data_api_client.client.orm import BubbleBaseModel
+from bubble_data_api_client.client.orm import BubbleModel
 from bubble_data_api_client.client.raw_client import RawClient
 from bubble_data_api_client.config import (
     BubbleConfig,
@@ -24,7 +24,7 @@ __all__ = [
     "configure",
     "set_config_provider",
     # client classes
-    "BubbleBaseModel",
+    "BubbleModel",
     "RawClient",
     # query building
     "Constraint",

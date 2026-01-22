@@ -1,11 +1,11 @@
 import pytest
 
-from bubble_data_api_client.client.orm import BubbleBaseModel
+from bubble_data_api_client.client.orm import BubbleModel
 from bubble_data_api_client.constraints import ConstraintType, constraint
 from bubble_data_api_client.types import BubbleField
 
 
-class IntegrationTestModel(BubbleBaseModel, typename="IntegrationTest"):
+class IntegrationTestModel(BubbleModel, typename="IntegrationTest"):
     text: str
 
 

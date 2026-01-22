@@ -1,5 +1,6 @@
 import http
 import typing
+from datetime import datetime
 
 import httpx
 from pydantic import BaseModel as PydanticBaseModel
@@ -15,10 +16,31 @@ def _get_client() -> RawClient:
     return RawClient()
 
 
-class BubbleBaseModel(PydanticBaseModel):
+class BubbleModel(PydanticBaseModel):
+    """Base class for Bubble data types with built-in fields and ORM operations."""
+
     _typename: typing.ClassVar[str]
 
-    uid: str = Field(..., alias=BubbleField.ID)
+    uid: str = Field(
+        ...,
+        alias=BubbleField.ID,
+        description="Unique ID in format '{timestamp}x{random}' that identifies this record.",
+    )
+    created_date: datetime | None = Field(
+        default=None,
+        alias=BubbleField.CREATED_DATE,
+        description="Creation date of this record. Never changes.",
+    )
+    modified_date: datetime | None = Field(
+        default=None,
+        alias=BubbleField.MODIFIED_DATE,
+        description="Automatically updated when any changes are made to this record.",
+    )
+    slug: str | None = Field(
+        default=None,
+        alias=BubbleField.SLUG,
+        description="User-friendly and SEO-optimized URL for this record.",
+    )
 
     def __init_subclass__(cls, *, typename: str, **kwargs: typing.Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -72,7 +94,11 @@ class BubbleBaseModel(PydanticBaseModel):
 
     async def save(self) -> None:
         async with _get_client() as client:
-            data = self.model_dump(exclude={"uid"}, by_alias=True)
+            # exclude uid and server-managed fields
+            data = self.model_dump(
+                exclude={"uid", "created_date", "modified_date", "slug"},
+                by_alias=True,
+            )
             response = await client.update(self._typename, self.uid, data)
             response.raise_for_status()
 

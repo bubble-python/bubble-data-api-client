@@ -54,7 +54,7 @@ active_count = await User.count(constraints=[
 Models provide autocomplete and catch errors before runtime:
 
 ```python
-class User(BubbleBaseModel, typename="user"):
+class User(BubbleModel, typename="user"):
     name: str
     email: str
     age: int
@@ -76,7 +76,7 @@ user = User(_id="123x456", name="Ada", email="ada@example.com", age="twenty-five
 # ValidationError: Input should be a valid integer
 
 # Invalid Bubble UID caught at the model level
-class Order(BubbleBaseModel, typename="order"):
+class Order(BubbleModel, typename="order"):
     customer: BubbleUID
 
 order = Order(_id="123x456", customer="not-a-valid-uid")
@@ -158,14 +158,14 @@ set_config_provider(get_config)
 Define typed models with validation:
 
 ```python
-from bubble_data_api_client import BubbleBaseModel, BubbleUID, OptionalBubbleUID
+from bubble_data_api_client import BubbleModel, BubbleUID, OptionalBubbleUID
 
-class User(BubbleBaseModel, typename="user"):
+class User(BubbleModel, typename="user"):
     name: str
     email: str
     company: OptionalBubbleUID = None  # linked Bubble record
 
-class Company(BubbleBaseModel, typename="company"):
+class Company(BubbleModel, typename="company"):
     name: str
     industry: str
 ```
@@ -257,9 +257,9 @@ Available constraint types: `EQUALS`, `NOT_EQUAL`, `IS_EMPTY` (any field), `IS_N
 Validate Bubble record IDs at the type level:
 
 ```python
-from bubble_data_api_client import BubbleBaseModel, BubbleUID, OptionalBubbleUID, OptionalBubbleUIDs
+from bubble_data_api_client import BubbleModel, BubbleUID, OptionalBubbleUID, OptionalBubbleUIDs
 
-class Order(BubbleBaseModel, typename="order"):
+class Order(BubbleModel, typename="order"):
     customer: BubbleUID                    # required, validated
     referrer: OptionalBubbleUID = None     # optional, coerces invalid to None
     items: OptionalBubbleUIDs = None       # list of UIDs, filters invalid
@@ -316,9 +316,9 @@ This library is async-only, but you can use it in sync code:
 
 ```python
 import asyncio
-from bubble_data_api_client import BubbleBaseModel, constraint, ConstraintType
+from bubble_data_api_client import BubbleModel, constraint, ConstraintType
 
-class User(BubbleBaseModel, typename="user"):
+class User(BubbleModel, typename="user"):
     name: str
     email: str
     early_access_enabled: bool = False
