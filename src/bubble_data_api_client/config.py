@@ -1,3 +1,14 @@
+"""Configuration management for Bubble Data API credentials and settings.
+
+Configure the client before making API calls:
+
+    # Option 1: Static configuration
+    configure(data_api_root_url="https://app.bubble.io/api/1.1/obj", api_key="...")
+
+    # Option 2: Dynamic configuration (e.g., for multi-tenant apps)
+    set_config_provider(lambda: get_config_for_current_user())
+"""
+
 from collections.abc import Callable
 from typing import NotRequired, TypedDict, TypeIs
 
@@ -10,6 +21,7 @@ class _NotSet:
     __slots__ = ()
 
     def __repr__(self) -> str:
+        """Return string representation for debugging."""
         return "NOT_SET"
 
 

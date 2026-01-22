@@ -1,3 +1,9 @@
+"""Low-level async client for direct Bubble Data API access.
+
+Use RawClient when you need direct control over API calls without ORM overhead.
+For most use cases, prefer BubbleModel which provides a higher-level interface.
+"""
+
 import asyncio
 import http
 import json
@@ -16,13 +22,14 @@ from bubble_data_api_client.types import BubbleField, CreateOrUpdateResult, OnMu
 # in addition to 'sort_field' and 'descending', it is possible to have
 # multiple additional sort fields
 class AdditionalSortField(typing.TypedDict):
+    """Secondary sort field for multi-field sorting in find queries."""
+
     sort_field: str
     descending: bool
 
 
 class RawClient:
-    """
-    Raw Client layer focuses on bubble.io API endpoints.
+    """Raw Client layer focuses on bubble.io API endpoints.
 
     https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests
     https://www.postman.com/bubbleapi/bubble/request/jigyk5v/
@@ -31,9 +38,10 @@ class RawClient:
     _transport: Transport
 
     def __init__(self) -> None:
-        pass
+        """Initialize the client (must be used as async context manager)."""
 
     async def __aenter__(self) -> typing.Self:
+        """Enter async context and initialize the HTTP transport."""
         self._transport = Transport()
         await self._transport.__aenter__()
         return self
@@ -44,27 +52,34 @@ class RawClient:
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> None:
+        """Exit async context and close the HTTP transport."""
         await self._transport.__aexit__(exc_type, exc_val, exc_tb)
 
     async def retrieve(self, typename: str, uid: str) -> httpx.Response:
+        """Fetch a single thing by its unique ID."""
         return await self._transport.get(f"/{typename}/{uid}")
 
     async def create(self, typename: str, data: typing.Any) -> httpx.Response:
+        """Create a new thing with the given data."""
         return await self._transport.post(url=f"/{typename}", json=data)
 
     async def bulk_create(self, typename: str, data: list[typing.Any]) -> httpx.Response:
+        """Create multiple things in a single request using newline-delimited JSON."""
         return await self._transport.post_text(
             url=f"/{typename}/bulk",
             content="\n".join(json.dumps(item) for item in data),
         )
 
     async def delete(self, typename: str, uid: str) -> httpx.Response:
+        """Delete a thing by its unique ID."""
         return await self._transport.delete(f"/{typename}/{uid}")
 
     async def update(self, typename: str, uid: str, data: typing.Any) -> httpx.Response:
+        """Partially update a thing with PATCH, only modifying specified fields."""
         return await self._transport.patch(f"/{typename}/{uid}", json=data)
 
     async def replace(self, typename: str, uid: str, data: typing.Any) -> httpx.Response:
+        """Fully replace a thing's data with PUT, clearing unspecified fields."""
         return await self._transport.put(f"/{typename}/{uid}", json=data)
 
     # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#get-a-list-of-things
@@ -80,6 +95,7 @@ class RawClient:
         exclude_remaining: bool | None = None,
         additional_sort_fields: list[AdditionalSortField] | None = None,
     ) -> httpx.Response:
+        """Search for things matching constraints with pagination and sorting."""
         params: dict[str, str] = {}
 
         if constraints is not None:

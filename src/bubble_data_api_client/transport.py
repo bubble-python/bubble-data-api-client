@@ -24,9 +24,10 @@ class Transport:
     _http: httpx.AsyncClient
 
     def __init__(self) -> None:
-        pass
+        """Initialize the transport (must be used as async context manager)."""
 
     async def __aenter__(self) -> typing.Self:
+        """Enter async context and obtain a pooled HTTP client."""
         self._http = get_client()
         return self
 
@@ -36,7 +37,7 @@ class Transport:
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> None:
-        pass
+        """Exit async context. Client is returned to pool, not closed."""
 
     async def request(
         self,
@@ -48,6 +49,8 @@ class Transport:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
+        """Execute an HTTP request with optional retry logic."""
+
         async def do_request() -> httpx.Response:
             response: httpx.Response = await self._http.request(
                 method=method,
@@ -71,21 +74,27 @@ class Transport:
         *,
         params: dict[str, str] | None = None,
     ) -> httpx.Response:
+        """Execute a GET request."""
         return await self.request(method="GET", url=url, params=params)
 
     async def patch(self, url: str, json: typing.Any) -> httpx.Response:
+        """Execute a PATCH request with JSON body."""
         return await self.request(method="PATCH", url=url, json=json)
 
     async def put(self, url: str, json: typing.Any) -> httpx.Response:
+        """Execute a PUT request with JSON body."""
         return await self.request(method="PUT", url=url, json=json)
 
     async def delete(self, url: str) -> httpx.Response:
+        """Execute a DELETE request."""
         return await self.request(method="DELETE", url=url)
 
     async def post(self, url: str, json: typing.Any) -> httpx.Response:
+        """Execute a POST request with JSON body."""
         return await self.request(method="POST", url=url, json=json)
 
     async def post_text(self, url: str, content: str) -> httpx.Response:
+        """Execute a POST request with plain text body."""
         return await self.request(
             method="POST",
             url=url,

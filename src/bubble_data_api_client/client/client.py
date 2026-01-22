@@ -1,3 +1,5 @@
+"""High-level client with data validation and transformation."""
+
 from pydantic import BaseModel, Field
 
 from bubble_data_api_client.client.raw_client import RawClient
@@ -19,27 +21,31 @@ class BubbleDataApiResponseBody(BaseModel):
 
 
 class CreateThingSuccessResponse(BaseModel):
+    """Response body returned when a thing is successfully created."""
+
     status: str
     id: str
 
 
 class Bubble404ResponseBody(BaseModel):
+    """Body content of a Bubble 404 not found response."""
+
     status: str
     message: str
 
 
 class Bubble404Response(BaseModel):
+    """Structured representation of a Bubble 404 response."""
+
     status_code: int = Field(404, alias="statusCode")
     body: Bubble404ResponseBody
 
 
 class Client:
-    """
-    Client layer focuses on providing a convenient interface.
-    - CRUD operations
-    - data validation
-    - data transformation
-    - error handling
+    """High-level Bubble API client with validation and error handling.
+
+    Provides CRUD operations with data validation and transformation.
+    Consider using BubbleModel for ORM-style access instead.
     """
 
     _data_api_root_url: str
@@ -50,6 +56,12 @@ class Client:
         self,
         data_api_root_url: str,
         api_key: str,
-    ):
+    ) -> None:
+        """Initialize client with Bubble API credentials.
+
+        Args:
+            data_api_root_url: Base URL for the Bubble Data API.
+            api_key: API key for authentication.
+        """
         self._data_api_root_url = data_api_root_url
         self._api_key = api_key

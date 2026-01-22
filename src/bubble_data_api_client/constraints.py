@@ -1,15 +1,28 @@
+"""Query constraint types for filtering Bubble Data API results.
+
+Use the constraint() helper to build constraints for find() queries:
+
+    constraints = [
+        constraint("name", ConstraintType.EQUALS, "Alice"),
+        constraint("age", ConstraintType.GREATER_THAN, 18),
+    ]
+    users = await User.find(constraints=constraints)
+"""
+
 import typing
 from enum import StrEnum
 
 
-# all constraints are of the form:
 class BaseConstraint(typing.TypedDict):
+    """Base structure for all constraint types."""
+
     key: str
     constraint_type: str
 
 
-# some constraints have a value, some do not
 class Constraint(BaseConstraint, total=False):
+    """A query constraint with optional value for filtering results."""
+
     value: str
 
 

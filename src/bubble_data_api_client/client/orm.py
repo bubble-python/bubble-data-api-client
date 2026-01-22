@@ -1,3 +1,19 @@
+"""ORM-style base class for Bubble data types.
+
+Define models by subclassing BubbleModel with a typename parameter:
+
+    class User(BubbleModel, typename="user"):
+        name: str
+        email: str | None = None
+
+Then use async CRUD operations:
+    user = await User.create(name="Alice")
+    user = await User.get("1234x5678")
+    users = await User.find(constraints=[constraint("name", ConstraintType.EQUALS, "Alice")])
+    await user.save()
+    await user.delete()
+"""
+
 import http
 import typing
 from collections.abc import AsyncIterator
@@ -44,6 +60,7 @@ class BubbleModel(PydanticBaseModel):
     )
 
     def __init_subclass__(cls, *, typename: str, **kwargs: typing.Any) -> None:
+        """Register the Bubble type name for this model subclass."""
         super().__init_subclass__(**kwargs)
         cls._typename = typename
 
@@ -63,6 +80,14 @@ class BubbleModel(PydanticBaseModel):
 
     @classmethod
     async def create(cls, **data: typing.Any) -> typing.Self:
+        """Create a new thing in Bubble and return a model instance.
+
+        Args:
+            **data: Field values using Python field names (not Bubble aliases).
+
+        Returns:
+            A new model instance with the assigned Bubble UID.
+        """
         aliased_data = cls._resolve_aliases(data)
         async with _get_client() as client:
             response = await client.create(cls._typename, aliased_data)
@@ -94,6 +119,11 @@ class BubbleModel(PydanticBaseModel):
         return {item.uid: item for item in items}
 
     async def save(self) -> None:
+        """Persist all field changes to Bubble.
+
+        Saves all model fields except uid and server-managed fields
+        (created_date, modified_date, slug).
+        """
         async with _get_client() as client:
             # exclude uid and server-managed fields
             data = self.model_dump(
@@ -112,6 +142,7 @@ class BubbleModel(PydanticBaseModel):
             response.raise_for_status()
 
     async def delete(self) -> None:
+        """Delete this thing from Bubble."""
         async with _get_client() as client:
             response = await client.delete(self._typename, self.uid)
             response.raise_for_status()
@@ -128,6 +159,20 @@ class BubbleModel(PydanticBaseModel):
         exclude_remaining: bool | None = None,
         additional_sort_fields: list[AdditionalSortField] | None = None,
     ) -> list[typing.Self]:
+        """Search for things matching the given constraints.
+
+        Args:
+            constraints: Filter conditions (use constraint() helper to build).
+            cursor: Pagination offset (0-indexed).
+            limit: Maximum results to return (default 100, max varies by plan).
+            sort_field: Field name to sort by.
+            descending: Sort in descending order if True.
+            exclude_remaining: Skip counting remaining results for performance.
+            additional_sort_fields: Secondary sort fields after the primary.
+
+        Returns:
+            List of matching model instances.
+        """
         async with _get_client() as client:
             response = await client.find(
                 cls._typename,

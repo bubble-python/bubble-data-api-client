@@ -12,7 +12,6 @@ class IntegrationTestModel(BubbleModel, typename="IntegrationTest"):
 @pytest.mark.asyncio
 async def test_orm_integration():
     """Integration test for the ORM layer."""
-
     # create
     thing = await IntegrationTestModel.create(text="test")
     assert isinstance(thing, IntegrationTestModel)

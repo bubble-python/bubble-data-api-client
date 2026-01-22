@@ -11,7 +11,6 @@ from bubble_data_api_client.types import BubbleField
 @pytest.fixture()
 async def test_thing_id(bubble_raw_client: raw_client.RawClient, typename: str) -> AsyncGenerator[str]:
     """Create data in the bubble app and return the id of the created thing."""
-
     # create
     test_thing = {
         "text": "integration test",
@@ -28,7 +27,6 @@ async def test_thing_id(bubble_raw_client: raw_client.RawClient, typename: str) 
 
 async def test_retrieve_success(typename: str, test_thing_id: str, bubble_raw_client: raw_client.RawClient):
     """Test that we can retrieve a thing."""
-
     response = await bubble_raw_client.retrieve(typename=typename, uid=test_thing_id)
     assert isinstance(response, httpx.Response)
 
@@ -42,7 +40,6 @@ async def test_retrieve_success(typename: str, test_thing_id: str, bubble_raw_cl
 
 async def test_delete_success(typename: str, bubble_raw_client: raw_client.RawClient):
     """Test that we can delete a thing."""
-
     response_create = await bubble_raw_client.create(typename, data={"text": "integration test delete success"})
     assert isinstance(response_create, httpx.Response)
 

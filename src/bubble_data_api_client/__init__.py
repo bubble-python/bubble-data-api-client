@@ -1,3 +1,15 @@
+"""Python client for Bubble.io Data API with ORM-style models and async support.
+
+This library provides two ways to interact with Bubble's Data API:
+- BubbleModel: ORM-style base class for defining typed data models with CRUD operations
+- RawClient: Low-level async client for direct API access
+
+Quick start:
+    1. Configure credentials: configure(data_api_root_url="...", api_key="...")
+    2. Define a model: class User(BubbleModel, typename="user"): name: str
+    3. Use CRUD operations: await User.create(name="Alice")
+"""
+
 from bubble_data_api_client.client.orm import BubbleModel
 from bubble_data_api_client.client.raw_client import RawClient
 from bubble_data_api_client.config import (
