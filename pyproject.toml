@@ -1,13 +1,16 @@
 [project]
 name = "bubble-data-api-client"
 version = "0.4.2"
-description = "Python client for Bubble Data API"
+description = "Async Python client for Bubble Data API with Pydantic ORM, type safety, connection pooling, and configurable retries"
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.13"
+keywords = ["bubble", "bubble.io", "async", "pydantic", "orm", "api"]
 classifiers = [
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+    "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
     "httpx[http2]~=0.28",
@@ -17,6 +20,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/bubble-python/bubble-data-api-client"
+Repository = "https://github.com/bubble-python/bubble-data-api-client"
 
 [dependency-groups]
 dev = [
