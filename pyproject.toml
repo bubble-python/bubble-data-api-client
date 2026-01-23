@@ -1,6 +1,6 @@
 [project]
 name = "bubble-data-api-client"
-version = "0.4.2"
+version = "0.4.3"
 description = "Async Python client for Bubble Data API with Pydantic ORM, type safety, connection pooling, and configurable retries"
 license = "MIT"
 readme = "README.md"
