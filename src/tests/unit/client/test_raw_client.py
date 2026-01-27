@@ -2,6 +2,7 @@ import httpx
 import pytest
 import respx
 
+from bubble_data_api_client import BubbleAPIError
 from bubble_data_api_client.client import raw_client
 
 
@@ -147,10 +148,10 @@ async def test_exists_by_uid_error_reraises(configured_client: None) -> None:
     )
 
     async with raw_client.RawClient() as client:
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(BubbleAPIError) as exc_info:
             await client.exists(typename="customer", uid="123x456")
 
-    assert exc_info.value.response.status_code == 500
+    assert exc_info.value.status_code == 500
 
 
 @respx.mock

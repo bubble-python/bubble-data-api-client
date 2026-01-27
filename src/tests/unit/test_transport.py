@@ -5,7 +5,7 @@ import pytest
 import respx
 import tenacity
 
-from bubble_data_api_client import configure, http_client
+from bubble_data_api_client import BubbleAPIError, configure, http_client
 from bubble_data_api_client.pool import close_clients
 from bubble_data_api_client.transport import Transport
 
@@ -42,9 +42,9 @@ async def test_transport_no_retry_fails_immediately(clean_client_pool: None) -> 
     route = respx.get("https://test.example.com/test").mock(return_value=httpx.Response(500))
 
     async with Transport() as transport:
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(BubbleAPIError) as exc_info:
             await transport.get("/test")
-        assert exc_info.value.response.status_code == 500
+        assert exc_info.value.status_code == 500
 
     assert route.call_count == 1
 
@@ -58,7 +58,7 @@ async def test_transport_retry_succeeds_after_failures(clean_client_pool: None) 
         retry=tenacity.AsyncRetrying(
             stop=tenacity.stop_after_attempt(3),
             wait=tenacity.wait_none(),
-            retry=tenacity.retry_if_exception_type(httpx.HTTPStatusError),
+            retry=tenacity.retry_if_exception_type(BubbleAPIError),
         ),
     )
 
@@ -86,7 +86,7 @@ async def test_transport_retry_exhausted(clean_client_pool: None) -> None:
         retry=tenacity.AsyncRetrying(
             stop=tenacity.stop_after_attempt(3),
             wait=tenacity.wait_none(),
-            retry=tenacity.retry_if_exception_type(httpx.HTTPStatusError),
+            retry=tenacity.retry_if_exception_type(BubbleAPIError),
         ),
     )
 

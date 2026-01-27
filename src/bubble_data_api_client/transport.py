@@ -6,6 +6,7 @@ import typing
 import httpx
 
 from bubble_data_api_client.config import get_config
+from bubble_data_api_client.exceptions import BubbleAPIError
 from bubble_data_api_client.pool import get_client
 
 
@@ -15,7 +16,11 @@ class Transport:
     Responsibilities:
     - Obtains a pooled httpx client on entry
     - Provides HTTP verb methods (get, post, patch, put, delete)
-    - Raises on non-2xx responses
+    - Raises BubbleAPIError on non-2xx responses (single point of HTTP error handling)
+
+    All HTTP operations in this library flow through Transport.request(), which is
+    the only place that checks response status and raises errors. Higher layers
+    (RawClient, ORM) can assume that if a response is returned, it was successful.
 
     HTTP client configuration (headers, retries, timeouts) is handled by
     the http_client module. Connection pooling is handled by the pool module.
@@ -49,7 +54,14 @@ class Transport:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
-        """Execute an HTTP request with optional retry logic."""
+        """Execute an HTTP request with optional retry logic.
+
+        This is the single point of HTTP error handling for the library.
+        Non-2xx responses are converted to BubbleAPIError before returning.
+
+        Raises:
+            BubbleAPIError: On any non-2xx HTTP response.
+        """
 
         async def do_request() -> httpx.Response:
             response: httpx.Response = await self._http.request(
@@ -60,7 +72,10 @@ class Transport:
                 params=params,
                 headers=headers,
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise BubbleAPIError.from_response(response) from e
             return response
 
         retry = get_config().get("retry")

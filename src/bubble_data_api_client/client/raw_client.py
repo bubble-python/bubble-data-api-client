@@ -13,7 +13,12 @@ import typing
 import httpx
 
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
-from bubble_data_api_client.exceptions import InvalidOnMultipleError, MultipleMatchesError, PartialFailureError
+from bubble_data_api_client.exceptions import (
+    BubbleAPIError,
+    InvalidOnMultipleError,
+    MultipleMatchesError,
+    PartialFailureError,
+)
 from bubble_data_api_client.transport import Transport
 from bubble_data_api_client.types import BubbleField, CreateOrUpdateResult, OnMultiple
 
@@ -142,8 +147,8 @@ class RawClient:
             # ID lookup: retrieve + 404 is optimal (no JSON parsing needed)
             try:
                 await self.retrieve(typename, uid)
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == http.HTTPStatus.NOT_FOUND:
+            except BubbleAPIError as e:
+                if e.status_code == http.HTTPStatus.NOT_FOUND:
                     return False
                 raise
             else:
@@ -223,7 +228,6 @@ class RawClient:
         if not results:
             merged_create_data = {**match, **(create_data or {})}
             response = await self.create(typename=typename, data=merged_create_data)
-            response.raise_for_status()
             uid: str = response.json()["id"]
             return {"uids": [uid], "created": True}
 
@@ -231,8 +235,7 @@ class RawClient:
         if len(results) == 1:
             uid = results[0][BubbleField.ID]
             if update_data:
-                response = await self.update(typename=typename, uid=uid, data=update_data)
-                response.raise_for_status()
+                await self.update(typename=typename, uid=uid, data=update_data)
             return {"uids": [uid], "created": False}
 
         # multiple matches: handle according to strategy
@@ -243,8 +246,7 @@ class RawClient:
             case OnMultiple.UPDATE_FIRST:
                 uid = results[0][BubbleField.ID]
                 if update_data:
-                    response = await self.update(typename=typename, uid=uid, data=update_data)
-                    response.raise_for_status()
+                    await self.update(typename=typename, uid=uid, data=update_data)
                 return {"uids": [uid], "created": False}
 
             case OnMultiple.UPDATE_ALL:
@@ -263,7 +265,6 @@ class RawClient:
                         if isinstance(item, BaseException):
                             failed.append((uid, item))
                         else:
-                            item.raise_for_status()
                             succeeded.append(uid)
 
                     if failed:
@@ -286,8 +287,7 @@ class RawClient:
 
                 # update first so data is preserved even if deletes fail
                 if update_data:
-                    response = await self.update(typename=typename, uid=keep_uid, data=update_data)
-                    response.raise_for_status()
+                    await self.update(typename=typename, uid=keep_uid, data=update_data)
 
                 # delete duplicates concurrently, letting all complete before checking errors
                 delete_results = await asyncio.gather(
@@ -301,7 +301,6 @@ class RawClient:
                     if isinstance(item, BaseException):
                         failed.append((uid, item))
                     else:
-                        item.raise_for_status()
                         succeeded.append(uid)
 
                 if failed:

@@ -19,13 +19,12 @@ import typing
 from collections.abc import AsyncIterator
 from datetime import datetime
 
-import httpx
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import AdditionalSortField, RawClient
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
-from bubble_data_api_client.exceptions import UnknownFieldError
+from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
 from bubble_data_api_client.types import BubbleField, OnMultiple
 
 
@@ -91,7 +90,6 @@ class BubbleModel(PydanticBaseModel):
         aliased_data = cls._resolve_aliases(data)
         async with _get_client() as client:
             response = await client.create(cls._typename, aliased_data)
-            response.raise_for_status()
             uid = response.json()["id"]
             return cls(**aliased_data, **{BubbleField.ID: uid})
 
@@ -101,10 +99,9 @@ class BubbleModel(PydanticBaseModel):
         async with _get_client() as client:
             try:
                 response = await client.retrieve(cls._typename, uid)
-                response.raise_for_status()
                 return cls(**response.json()["response"])
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == http.HTTPStatus.NOT_FOUND:
+            except BubbleAPIError as e:
+                if e.status_code == http.HTTPStatus.NOT_FOUND:
                     return None
                 raise
 
@@ -130,22 +127,19 @@ class BubbleModel(PydanticBaseModel):
                 exclude={"uid", "created_date", "modified_date", "slug"},
                 by_alias=True,
             )
-            response = await client.update(self._typename, self.uid, data)
-            response.raise_for_status()
+            await client.update(self._typename, self.uid, data)
 
     @classmethod
     async def update(cls, uid: str, **data: typing.Any) -> None:
         """Update specific fields on a thing by its unique ID."""
         aliased_data = cls._resolve_aliases(data)
         async with _get_client() as client:
-            response = await client.update(cls._typename, uid, aliased_data)
-            response.raise_for_status()
+            await client.update(cls._typename, uid, aliased_data)
 
     async def delete(self) -> None:
         """Delete this thing from Bubble."""
         async with _get_client() as client:
-            response = await client.delete(self._typename, self.uid)
-            response.raise_for_status()
+            await client.delete(self._typename, self.uid)
 
     @classmethod
     async def find(
@@ -184,7 +178,6 @@ class BubbleModel(PydanticBaseModel):
                 exclude_remaining=exclude_remaining,
                 additional_sort_fields=additional_sort_fields,
             )
-            response.raise_for_status()
             return [cls(**item) for item in response.json()["response"]["results"]]
 
     @classmethod
@@ -210,7 +203,6 @@ class BubbleModel(PydanticBaseModel):
                     descending=descending,
                     additional_sort_fields=additional_sort_fields,
                 )
-                response.raise_for_status()
                 body = response.json()["response"]
                 for item in body["results"]:
                     yield cls(**item)

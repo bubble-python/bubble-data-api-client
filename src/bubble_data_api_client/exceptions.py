@@ -1,5 +1,9 @@
 """Exception types for Bubble Data API errors."""
 
+import typing
+
+import httpx
+
 
 class BubbleError(Exception):
     """Base class for all exceptions raised by the library."""
@@ -15,6 +19,52 @@ class ConfigurationError(BubbleError):
 
 class BubbleHttpError(BubbleError):
     """Base class for all high level HTTP errors."""
+
+
+class BubbleAPIError(BubbleHttpError):
+    """Structured error from Bubble API responses.
+
+    Attributes:
+        status_code: HTTP status code (400, 404, 500, etc.)
+        status: Bubble error status string ("MISSING_DATA", etc.) or None if unparseable
+        message: Human-readable error message from Bubble or raw response text
+        response: Original httpx.Response for advanced inspection
+    """
+
+    def __init__(
+        self,
+        status_code: int,
+        status: str | None,
+        message: str,
+        response: httpx.Response,
+    ) -> None:
+        """Create error with parsed Bubble API response data."""
+        self.status_code = status_code
+        self.status = status
+        self.message = message
+        self.response = response
+        super().__init__(message)
+
+    @classmethod
+    def from_response(cls, response: httpx.Response) -> typing.Self:
+        """Parse Bubble error response and construct exception."""
+        status: str | None = None
+        message: str = response.text
+
+        try:
+            data = response.json()
+            body = data.get("body", {})
+            status = body.get("status")
+            message = body.get("message", response.text)
+        except Exception:  # noqa: S110
+            pass  # fall back to raw response text
+
+        return cls(
+            status_code=response.status_code,
+            status=status,
+            message=message,
+            response=response,
+        )
 
 
 class BubbleUnauthorizedError(BubbleHttpError):

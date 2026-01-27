@@ -19,6 +19,7 @@ from bubble_data_api_client.config import (
     set_config_provider,
 )
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
+from bubble_data_api_client.exceptions import BubbleAPIError
 from bubble_data_api_client.pool import client_scope, close_clients
 from bubble_data_api_client.types import (
     BubbleField,
@@ -38,6 +39,8 @@ __all__ = [
     # client classes
     "BubbleModel",
     "RawClient",
+    # exceptions
+    "BubbleAPIError",
     # query building
     "Constraint",
     "ConstraintType",
