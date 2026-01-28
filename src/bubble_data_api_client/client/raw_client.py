@@ -34,10 +34,27 @@ class AdditionalSortField(typing.TypedDict):
 
 
 class RawClient:
-    """Raw Client layer focuses on bubble.io API endpoints.
+    """Low-level client providing raw access to all Bubble Data API endpoints.
 
-    https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests
-    https://www.postman.com/bubbleapi/bubble/request/jigyk5v/
+    This client serves two purposes:
+
+    Raw API methods are direct 1:1 mappings to Bubble Data API endpoints. These
+    return httpx.Response to give full access to status codes, headers, and
+    response bodies. The caller is responsible for parsing responses.
+
+        retrieve, create, bulk_create, delete, update, replace, find
+
+    Convenience methods are higher-level operations built on top of raw methods.
+    These handle response parsing and return typed values. Use these when you
+    don't need raw HTTP access.
+
+        count, exists, create_or_update
+
+    For ORM-style access with model classes, use BubbleModel instead.
+
+    References:
+        https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests
+        https://www.postman.com/bubbleapi/bubble/request/jigyk5v/
     """
 
     _transport: Transport
