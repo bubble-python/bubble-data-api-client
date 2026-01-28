@@ -20,7 +20,12 @@ from bubble_data_api_client.exceptions import (
     PartialFailureError,
 )
 from bubble_data_api_client.transport import Transport
-from bubble_data_api_client.types import BubbleField, CreateOrUpdateResult, OnMultiple
+from bubble_data_api_client.types import (
+    BubbleField,
+    BulkCreateItemResult,
+    CreateOrUpdateResult,
+    OnMultiple,
+)
 
 
 # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#sorting
@@ -48,7 +53,7 @@ class RawClient:
     These handle response parsing and return typed values. Use these when you
     don't need raw HTTP access.
 
-        count, exists, create_or_update
+        count, exists, create_or_update, bulk_create_parsed
 
     For ORM-style access with model classes, use BubbleModel instead.
 
@@ -89,12 +94,35 @@ class RawClient:
     async def bulk_create(self, typename: str, data: list[typing.Any]) -> httpx.Response:
         """Create multiple things in a single request using newline-delimited JSON.
 
-        Response is text/plain with one JSON object per line: {"status":"success","id":"..."}
+        Response is text/plain with one JSON object per line, in the same order as input:
+            Success: {"status":"success","id":"1234x5678"}
+            Error: {"status":"error","message":"Could not parse as JSON: ..."}
+
+        Partial failures are possible where some items succeed and others fail.
         """
         return await self._transport.post_text(
             url=f"/{typename}/bulk",
             content="\n".join(json.dumps(item) for item in data),
         )
+
+    async def bulk_create_parsed(self, typename: str, data: list[typing.Any]) -> list[BulkCreateItemResult]:
+        """Create multiple things and return parsed results for each item.
+
+        Returns a list of results in the same order as input data. Each result
+        contains status, id (on success), and message (on error).
+        """
+        response = await self.bulk_create(typename=typename, data=data)
+        results: list[BulkCreateItemResult] = []
+        for line in response.text.strip().split("\n"):
+            parsed = json.loads(line)
+            results.append(
+                BulkCreateItemResult(
+                    status=parsed["status"],
+                    id=parsed.get("id"),
+                    message=parsed.get("message"),
+                )
+            )
+        return results
 
     async def delete(self, typename: str, uid: str) -> httpx.Response:
         """Delete a thing by its unique ID."""

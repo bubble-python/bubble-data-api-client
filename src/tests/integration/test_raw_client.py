@@ -79,6 +79,37 @@ async def test_bulk_create_success(typename: str, bubble_raw_client: raw_client.
                 warnings.warn(f"cleanup failed for {uid}: {e}", stacklevel=2)
 
 
+async def test_bulk_create_parsed_success(typename: str, bubble_raw_client: raw_client.RawClient):
+    """Test that bulk_create_parsed returns typed results."""
+    created_ids: list[str] = []
+
+    try:
+        results = await bubble_raw_client.bulk_create_parsed(
+            typename=typename,
+            data=[{"text": "parsed test 1"}, {"text": "parsed test 2"}],
+        )
+
+        assert len(results) == 2
+        for result in results:
+            assert result["status"] == "success"
+            assert result["id"] is not None
+            assert result["message"] is None
+            created_ids.append(result["id"])
+
+        # verify items exist with correct data
+        expected_texts = ["parsed test 1", "parsed test 2"]
+        for uid, expected_text in zip(created_ids, expected_texts, strict=True):
+            retrieve_response = await bubble_raw_client.retrieve(typename=typename, uid=uid)
+            assert retrieve_response.json()["response"]["text"] == expected_text
+
+    finally:
+        for uid in created_ids:
+            try:
+                await bubble_raw_client.delete(typename=typename, uid=uid)
+            except Exception as e:
+                warnings.warn(f"cleanup failed for {uid}: {e}", stacklevel=2)
+
+
 async def test_update_success(typename: str, test_thing_id: str, bubble_raw_client: raw_client.RawClient):
     """Test that we can update a thing."""
     response = await bubble_raw_client.update(typename=typename, uid=test_thing_id, data={"text": "updated text"})

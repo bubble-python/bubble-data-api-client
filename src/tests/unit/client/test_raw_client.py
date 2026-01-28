@@ -61,6 +61,52 @@ async def test_bulk_create(configured_client: None) -> None:
 
 
 @respx.mock
+async def test_bulk_create_parsed_success(configured_client: None) -> None:
+    """Test that bulk_create_parsed returns parsed results on success."""
+    mock_response_text = '{"status":"success","id":"1234x5678"}\n{"status":"success","id":"1234x5679"}'
+    respx.post("https://example.com/customer/bulk").mock(
+        return_value=httpx.Response(200, text=mock_response_text, headers={"content-type": "text/plain"})
+    )
+
+    async with raw_client.RawClient() as client:
+        results = await client.bulk_create_parsed(
+            typename="customer",
+            data=[{"name": "Alice"}, {"name": "Bob"}],
+        )
+
+    assert len(results) == 2
+    assert results[0]["status"] == "success"
+    assert results[0]["id"] == "1234x5678"
+    assert results[0]["message"] is None
+    assert results[1]["status"] == "success"
+    assert results[1]["id"] == "1234x5679"
+    assert results[1]["message"] is None
+
+
+@respx.mock
+async def test_bulk_create_parsed_partial_failure(configured_client: None) -> None:
+    """Test that bulk_create_parsed returns parsed results on partial failure."""
+    mock_response_text = '{"status":"success","id":"1234x5678"}\n{"status":"error","message":"Invalid field value"}'
+    respx.post("https://example.com/customer/bulk").mock(
+        return_value=httpx.Response(200, text=mock_response_text, headers={"content-type": "text/plain"})
+    )
+
+    async with raw_client.RawClient() as client:
+        results = await client.bulk_create_parsed(
+            typename="customer",
+            data=[{"name": "Alice"}, {"name": ""}],
+        )
+
+    assert len(results) == 2
+    assert results[0]["status"] == "success"
+    assert results[0]["id"] == "1234x5678"
+    assert results[0]["message"] is None
+    assert results[1]["status"] == "error"
+    assert results[1]["id"] is None
+    assert results[1]["message"] == "Invalid field value"
+
+
+@respx.mock
 async def test_find_with_parameters(configured_client: None) -> None:
     """Test that find passes optional parameters correctly."""
     route = respx.get("https://example.com/customer").mock(

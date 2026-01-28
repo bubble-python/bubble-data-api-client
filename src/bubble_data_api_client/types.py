@@ -1,7 +1,7 @@
 """Bubble platform types for use with Pydantic models."""
 
 from enum import StrEnum
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from pydantic import AfterValidator, BeforeValidator
 
@@ -35,6 +35,18 @@ class CreateOrUpdateResult(TypedDict):
 
     uids: list[str]
     created: bool
+
+
+class BulkCreateItemResult(TypedDict):
+    """Result for a single item in a bulk create operation.
+
+    On success: status="success", id=<uid>, message=None
+    On error: status="error", id=None, message=<error description>
+    """
+
+    status: Literal["success", "error"]
+    id: str | None
+    message: str | None
 
 
 def _validate_bubble_uid(value: str) -> str:

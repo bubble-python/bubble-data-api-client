@@ -24,6 +24,7 @@ from bubble_data_api_client.pool import client_scope, close_clients
 from bubble_data_api_client.types import (
     BubbleField,
     BubbleUID,
+    BulkCreateItemResult,
     OnMultiple,
     OptionalBubbleUID,
     OptionalBubbleUIDs,
@@ -51,6 +52,7 @@ __all__ = [
     # types
     "BubbleField",
     "BubbleUID",
+    "BulkCreateItemResult",
     "OnMultiple",
     "OptionalBubbleUID",
     "OptionalBubbleUIDs",
