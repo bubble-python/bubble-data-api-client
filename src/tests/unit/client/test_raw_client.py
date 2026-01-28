@@ -40,8 +40,10 @@ async def test_replace(configured_client: None) -> None:
 @respx.mock
 async def test_bulk_create(configured_client: None) -> None:
     """Test that bulk_create posts newline-delimited JSON."""
+    # bubble returns text/plain with one JSON object per line
+    mock_response_text = '{"status":"success","id":"1234x5678"}\n{"status":"success","id":"1234x5679"}'
     route = respx.post("https://example.com/customer/bulk").mock(
-        return_value=httpx.Response(200, json={"status": "success", "count": 2})
+        return_value=httpx.Response(200, text=mock_response_text, headers={"content-type": "text/plain"})
     )
 
     async with raw_client.RawClient() as client:
@@ -51,6 +53,7 @@ async def test_bulk_create(configured_client: None) -> None:
         )
 
     assert response.status_code == 200
+    assert response.headers["content-type"] == "text/plain"
     assert route.call_count == 1
     # verify it sent newline-delimited JSON
     request_content = route.calls[0].request.content.decode()

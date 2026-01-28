@@ -1,4 +1,6 @@
 import http
+import json
+import warnings
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -36,6 +38,56 @@ async def test_retrieve_success(typename: str, test_thing_id: str, bubble_raw_cl
     assert response_body["response"][BubbleField.ID] == test_thing_id
     assert "text" in response_body["response"]
     assert response_body["response"]["text"] == "integration test"
+
+
+async def test_bulk_create_success(typename: str, bubble_raw_client: raw_client.RawClient):
+    """Test that bulk_create creates multiple things and returns their IDs."""
+    created_ids: list[str] = []
+
+    try:
+        response = await bubble_raw_client.bulk_create(
+            typename=typename,
+            data=[{"text": "bulk test 1"}, {"text": "bulk test 2"}],
+        )
+
+        # bubble returns text/plain with newline-delimited JSON
+        assert response.status_code == http.HTTPStatus.OK
+        assert response.headers["content-type"] == "text/plain"
+        lines = response.text.strip().split("\n")
+        assert len(lines) == 2
+
+        # parse each line and extract IDs for cleanup
+        for line in lines:
+            result = json.loads(line)
+            assert result["status"] == "success"
+            assert "id" in result
+            created_ids.append(result["id"])
+
+        # verify both items exist with correct data
+        expected_texts = ["bulk test 1", "bulk test 2"]
+        for uid, expected_text in zip(created_ids, expected_texts, strict=True):
+            retrieve_response = await bubble_raw_client.retrieve(typename=typename, uid=uid)
+            assert retrieve_response.status_code == http.HTTPStatus.OK
+            assert retrieve_response.json()["response"]["text"] == expected_text
+
+    finally:
+        # cleanup all created items
+        for uid in created_ids:
+            try:
+                await bubble_raw_client.delete(typename=typename, uid=uid)
+            except Exception as e:
+                warnings.warn(f"cleanup failed for {uid}: {e}", stacklevel=2)
+
+
+async def test_update_success(typename: str, test_thing_id: str, bubble_raw_client: raw_client.RawClient):
+    """Test that we can update a thing."""
+    response = await bubble_raw_client.update(typename=typename, uid=test_thing_id, data={"text": "updated text"})
+    # 204 No Content = success
+    assert response.status_code == http.HTTPStatus.NO_CONTENT
+
+    # verify the update
+    response = await bubble_raw_client.retrieve(typename=typename, uid=test_thing_id)
+    assert response.json()["response"]["text"] == "updated text"
 
 
 async def test_delete_success(typename: str, bubble_raw_client: raw_client.RawClient):

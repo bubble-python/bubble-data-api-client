@@ -85,8 +85,12 @@ class RawClient:
         """Create a new thing with the given data."""
         return await self._transport.post(url=f"/{typename}", json=data)
 
+    # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#bulk-create-things
     async def bulk_create(self, typename: str, data: list[typing.Any]) -> httpx.Response:
-        """Create multiple things in a single request using newline-delimited JSON."""
+        """Create multiple things in a single request using newline-delimited JSON.
+
+        Response is text/plain with one JSON object per line: {"status":"success","id":"..."}
+        """
         return await self._transport.post_text(
             url=f"/{typename}/bulk",
             content="\n".join(json.dumps(item) for item in data),
