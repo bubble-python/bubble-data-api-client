@@ -91,7 +91,7 @@ class BubbleModel(PydanticBaseModel):
         async with _get_client() as client:
             response = await client.create(cls._typename, aliased_data)
             uid = response.json()["id"]
-            return cls(**aliased_data, **{BubbleField.ID: uid})
+            return cls.model_validate({**aliased_data, BubbleField.ID: uid})
 
     @classmethod
     async def get(cls, uid: str) -> typing.Self | None:
@@ -99,7 +99,7 @@ class BubbleModel(PydanticBaseModel):
         async with _get_client() as client:
             try:
                 response = await client.retrieve(cls._typename, uid)
-                return cls(**response.json()["response"])
+                return cls.model_validate(response.json()["response"])
             except BubbleAPIError as e:
                 if e.status_code == http.HTTPStatus.NOT_FOUND:
                     return None
@@ -141,6 +141,26 @@ class BubbleModel(PydanticBaseModel):
         async with _get_client() as client:
             await client.delete(self._typename, self.uid)
 
+    async def refresh(self) -> typing.Self:
+        """Fetch latest data from Bubble and update this instance in place.
+
+        Useful after create_or_update() to get server-computed fields like
+        Modified Date, or fields set by Bubble workflows.
+
+        Returns:
+            Self, for method chaining.
+
+        Raises:
+            BubbleAPIError: If the record no longer exists (404) or other API error.
+        """
+        async with _get_client() as client:
+            response = await client.retrieve(self._typename, self.uid)
+            cls = type(self)
+            fresh = cls.model_validate(response.json()["response"])
+            for field_name in cls.model_fields:
+                setattr(self, field_name, getattr(fresh, field_name))
+            return self
+
     @classmethod
     async def find(
         cls,
@@ -178,7 +198,7 @@ class BubbleModel(PydanticBaseModel):
                 exclude_remaining=exclude_remaining,
                 additional_sort_fields=additional_sort_fields,
             )
-            return [cls(**item) for item in response.json()["response"]["results"]]
+            return [cls.model_validate(item) for item in response.json()["response"]["results"]]
 
     @classmethod
     async def find_iter(
@@ -205,7 +225,7 @@ class BubbleModel(PydanticBaseModel):
                 )
                 body = response.json()["response"]
                 for item in body["results"]:
-                    yield cls(**item)
+                    yield cls.model_validate(item)
                 if body["remaining"] == 0:
                     break
                 cursor += len(body["results"])
@@ -273,4 +293,5 @@ class BubbleModel(PydanticBaseModel):
             # construct instance from aliased data
             # server-side fields like Modified Date won't be populated
             instance_data = (aliased_create_data or {}) if result["created"] else (aliased_update_data or {})
-            return cls(**aliased_match, **instance_data, **{BubbleField.ID: result["uids"][0]}), result["created"]
+            model_data = {**aliased_match, **instance_data, BubbleField.ID: result["uids"][0]}
+            return cls.model_validate(model_data), result["created"]

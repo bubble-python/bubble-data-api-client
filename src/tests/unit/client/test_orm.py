@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -6,7 +7,7 @@ import respx
 from pydantic import Field
 
 from bubble_data_api_client.client.orm import BubbleModel
-from bubble_data_api_client.exceptions import UnknownFieldError
+from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
 
 
 def test_model_instantiation():
@@ -347,3 +348,81 @@ async def test_find_all_returns_list(configured_client: None) -> None:
     assert len(users) == 2
     assert users[0].name == "Alice"
     assert users[1].name == "Bob"
+
+
+@respx.mock
+async def test_refresh_updates_instance_in_place(configured_client: None) -> None:
+    """Verify refresh() fetches data and updates the instance in place."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+        email: str | None = None
+
+    user = User(_id="abc123", name="Old Name", email=None)
+
+    respx.get("https://example.com/user/abc123").mock(
+        return_value=httpx.Response(
+            200,
+            json={"response": {"_id": "abc123", "name": "New Name", "email": "new@example.com"}},
+        )
+    )
+
+    result = await user.refresh()
+
+    # verify instance was updated in place
+    assert user.name == "New Name"
+    assert user.email == "new@example.com"
+    # verify returns self for chaining
+    assert result is user
+
+
+@respx.mock
+async def test_refresh_updates_server_computed_fields(configured_client: None) -> None:
+    """Verify refresh() populates server-computed fields like modified_date."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    user = User(_id="abc123", name="Test")
+    assert user.modified_date is None
+
+    respx.get("https://example.com/user/abc123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "_id": "abc123",
+                    "name": "Test",
+                    "Created Date": "2024-01-15T10:30:00.000Z",
+                    "Modified Date": "2024-01-16T14:20:00.000Z",
+                }
+            },
+        )
+    )
+
+    await user.refresh()
+
+    assert user.created_date == datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
+    assert user.modified_date == datetime(2024, 1, 16, 14, 20, 0, tzinfo=UTC)
+
+
+@respx.mock
+async def test_refresh_raises_on_not_found(configured_client: None) -> None:
+    """Verify refresh() raises BubbleAPIError when record no longer exists."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    user = User(_id="deleted123", name="Ghost")
+
+    respx.get("https://example.com/user/deleted123").mock(
+        return_value=httpx.Response(
+            404,
+            json={"body": {"status": "NOT_FOUND", "message": "Thing not found"}},
+        )
+    )
+
+    with pytest.raises(BubbleAPIError) as exc_info:
+        await user.refresh()
+
+    assert exc_info.value.status_code == 404
