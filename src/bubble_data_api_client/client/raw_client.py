@@ -4,13 +4,18 @@ Use RawClient when you need direct control over API calls without ORM overhead.
 For most use cases, prefer BubbleModel which provides a higher-level interface.
 """
 
+from __future__ import annotations
+
 import asyncio
 import http
 import json
-import types
 import typing
+from typing import TYPE_CHECKING
 
-import httpx
+if TYPE_CHECKING:
+    import types
+
+    import httpx
 
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.exceptions import (

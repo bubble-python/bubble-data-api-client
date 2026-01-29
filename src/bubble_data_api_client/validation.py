@@ -1,8 +1,12 @@
 """Validation utilities for Bubble platform data."""
 
+from __future__ import annotations
+
 import re
-from collections.abc import Iterable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 _BUBBLE_UID_PATTERN: re.Pattern[str] = re.compile(r"^[0-9]+x[0-9]+$")
 

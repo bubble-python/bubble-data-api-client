@@ -1,11 +1,16 @@
 """Client pool for efficient connection reuse."""
 
+from __future__ import annotations
+
 import asyncio
 import atexit
 import threading
 import weakref
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 import httpx
 

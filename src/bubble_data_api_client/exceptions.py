@@ -1,8 +1,12 @@
 """Exception types for Bubble Data API errors."""
 
-import typing
+from __future__ import annotations
 
-import httpx
+import typing
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import httpx
 
 
 class BubbleError(Exception):

@@ -1,13 +1,19 @@
+from __future__ import annotations
+
 import http
 import json
 import warnings
-from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
 
-from bubble_data_api_client.client import raw_client
 from bubble_data_api_client.types import BubbleField
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from bubble_data_api_client.client import raw_client
 
 
 @pytest.fixture()

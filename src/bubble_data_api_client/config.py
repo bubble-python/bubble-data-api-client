@@ -9,16 +9,19 @@ Configure the client before making API calls:
     set_config_provider(lambda: get_config_for_current_user())
 """
 
+from __future__ import annotations
+
 import sys
 from collections.abc import Callable
-from typing import NotRequired, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 if sys.version_info >= (3, 13):  # noqa: UP036
     from typing import TypeIs
 else:
-    from typing_extensions import TypeIs  # noqa: UP035
+    from typing_extensions import TypeIs  # noqa: UP035, TC002
 
-import tenacity
+if TYPE_CHECKING:
+    import tenacity
 
 
 class _NotSet:

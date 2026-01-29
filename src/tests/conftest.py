@@ -1,6 +1,11 @@
-from collections.abc import AsyncGenerator
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 from bubble_data_api_client import configure
 from bubble_data_api_client.pool import close_clients

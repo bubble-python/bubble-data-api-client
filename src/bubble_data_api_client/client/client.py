@@ -1,8 +1,13 @@
 """High-level client with data validation and transformation."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, Field
 
-from bubble_data_api_client.client.raw_client import RawClient
+if TYPE_CHECKING:
+    from bubble_data_api_client.client.raw_client import RawClient
 
 
 class BubbleResponseFields(BaseModel):

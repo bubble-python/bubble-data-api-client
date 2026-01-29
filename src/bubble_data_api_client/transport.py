@@ -1,9 +1,14 @@
 """HTTP transport layer for Bubble Data API requests."""
 
-import types
+from __future__ import annotations
+
 import typing
+from typing import TYPE_CHECKING
 
 import httpx
+
+if TYPE_CHECKING:
+    import types
 
 from bubble_data_api_client.config import get_config
 from bubble_data_api_client.exceptions import BubbleAPIError

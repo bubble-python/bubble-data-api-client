@@ -1,9 +1,14 @@
-from collections.abc import AsyncGenerator
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
 import respx
 import tenacity
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 from bubble_data_api_client import BubbleAPIError, configure, http_client
 from bubble_data_api_client.pool import close_clients

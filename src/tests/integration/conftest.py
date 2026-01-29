@@ -1,15 +1,20 @@
 # load environment variables from a .env file for local testing
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from dotenv import load_dotenv
 
 load_dotenv()
-
-from collections.abc import AsyncGenerator  # noqa: E402
 
 import pytest  # noqa: E402
 
 from bubble_data_api_client import configure, settings  # noqa: E402
 from bubble_data_api_client.client import raw_client  # noqa: E402
 from bubble_data_api_client.pool import close_clients  # noqa: E402
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 
 @pytest.fixture(autouse=True)

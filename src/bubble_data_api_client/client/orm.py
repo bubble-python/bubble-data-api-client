@@ -14,10 +14,15 @@ Then use async CRUD operations:
     await user.delete()
 """
 
+from __future__ import annotations
+
 import http
 import typing
-from collections.abc import AsyncIterator
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
