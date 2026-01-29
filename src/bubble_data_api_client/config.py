@@ -9,8 +9,14 @@ Configure the client before making API calls:
     set_config_provider(lambda: get_config_for_current_user())
 """
 
+import sys
 from collections.abc import Callable
-from typing import NotRequired, TypedDict, TypeIs
+from typing import NotRequired, TypedDict
+
+if sys.version_info >= (3, 13):  # noqa: UP036
+    from typing import TypeIs
+else:
+    from typing_extensions import TypeIs  # noqa: UP035
 
 import tenacity
 
