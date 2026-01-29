@@ -4,11 +4,12 @@ version = "0.5.2"
 description = "Async Python client for Bubble Data API with Pydantic ORM, type safety, connection pooling, and configurable retries"
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 keywords = ["bubble", "bubble.io", "async", "pydantic", "orm", "api"]
 classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.12",
     "Typing :: Typed",
 ]
 dependencies = [

@@ -131,7 +131,7 @@ HTTP connections are pooled per event loop, avoiding reconnection overhead when 
 pip install bubble-data-api-client
 ```
 
-Requires Python 3.13+.
+Requires Python 3.12+.
 
 ## Quick Start
 
