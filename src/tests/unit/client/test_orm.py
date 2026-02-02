@@ -42,6 +42,23 @@ async def test_save_uses_field_aliases(configured_client: None) -> None:
 
 
 @respx.mock
+async def test_update_serializes_datetime(configured_client: None) -> None:
+    """Verify update() serializes datetime values to ISO strings."""
+
+    class Event(BubbleModel, typename="event"):
+        name: str
+        start_time: datetime
+
+    route = respx.patch("https://example.com/event/abc123").mock(return_value=httpx.Response(204))
+
+    await Event.update(uid="abc123", start_time=datetime(2026, 1, 15, 14, 30, 0))
+
+    assert route.call_count == 1
+    request_body = json.loads(route.calls[0].request.content)
+    assert request_body == {"start_time": "2026-01-15T14:30:00"}
+
+
+@respx.mock
 async def test_update_single_field(configured_client: None) -> None:
     """Verify update() sends only the specified field."""
 

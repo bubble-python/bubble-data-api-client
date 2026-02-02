@@ -18,6 +18,19 @@ class BubbleField(StrEnum):
     SLUG = "Slug"
 
 
+class BuiltinField(StrEnum):
+    """Python ORM attribute names for Bubble's built-in fields."""
+
+    UID = "uid"
+    CREATED_DATE = "created_date"
+    MODIFIED_DATE = "modified_date"
+    SLUG = "slug"
+
+
+BUILTIN_FIELDS: set[str] = set(BuiltinField)
+"""Python ORM attribute names for Bubble's built-in fields, as a set."""
+
+
 class OnMultiple(StrEnum):
     """Strategy for handling multiple matches in create_or_update."""
 

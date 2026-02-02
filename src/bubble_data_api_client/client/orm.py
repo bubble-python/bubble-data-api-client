@@ -30,7 +30,7 @@ from pydantic import Field
 from bubble_data_api_client.client.raw_client import AdditionalSortField, RawClient
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
-from bubble_data_api_client.types import BubbleField, OnMultiple
+from bubble_data_api_client.types import BUILTIN_FIELDS, BubbleField, OnMultiple
 
 
 def _get_client() -> RawClient:
@@ -69,18 +69,17 @@ class BubbleModel(PydanticBaseModel):
         cls._typename = typename
 
     @classmethod
-    def _resolve_aliases(cls, data: dict[str, typing.Any]) -> dict[str, typing.Any]:
-        """Translate ORM field names to their aliases for API requests."""
-        resolved: dict[str, typing.Any] = {}
-        for field_name, value in data.items():
-            field_info = cls.model_fields.get(field_name)
-            if field_info is None:
+    def _serialize_for_api(cls, data: dict[str, typing.Any]) -> dict[str, typing.Any]:
+        """Serialize field data for API requests with aliasing and JSON conversion."""
+        for field_name in data:
+            if field_name not in cls.model_fields:
                 raise UnknownFieldError(field_name)
-            if field_info.alias:
-                resolved[field_info.alias] = value
-            else:
-                resolved[field_name] = value
-        return resolved
+        partial = cls.model_construct(**data)
+        return partial.model_dump(
+            mode="json",
+            include=set(data.keys()),
+            by_alias=True,
+        )
 
     @classmethod
     async def create(cls, **data: typing.Any) -> typing.Self:
@@ -92,7 +91,7 @@ class BubbleModel(PydanticBaseModel):
         Returns:
             A new model instance with the assigned Bubble UID.
         """
-        aliased_data = cls._resolve_aliases(data)
+        aliased_data = cls._serialize_for_api(data)
         async with _get_client() as client:
             response = await client.create(cls._typename, aliased_data)
             uid = response.json()["id"]
@@ -129,7 +128,8 @@ class BubbleModel(PydanticBaseModel):
         async with _get_client() as client:
             # exclude uid and server-managed fields
             data = self.model_dump(
-                exclude={"uid", "created_date", "modified_date", "slug"},
+                mode="json",
+                exclude=BUILTIN_FIELDS,
                 by_alias=True,
             )
             await client.update(self._typename, self.uid, data)
@@ -137,7 +137,7 @@ class BubbleModel(PydanticBaseModel):
     @classmethod
     async def update(cls, uid: str, **data: typing.Any) -> None:
         """Update specific fields on a thing by its unique ID."""
-        aliased_data = cls._resolve_aliases(data)
+        aliased_data = cls._serialize_for_api(data)
         async with _get_client() as client:
             await client.update(cls._typename, uid, aliased_data)
 
@@ -284,9 +284,9 @@ class BubbleModel(PydanticBaseModel):
         on_multiple: OnMultiple,
     ) -> tuple[typing.Self, bool]:
         """Create a thing if it doesn't exist, or update if it does."""
-        aliased_match = cls._resolve_aliases(match)
-        aliased_create_data = cls._resolve_aliases(create_data) if create_data else None
-        aliased_update_data = cls._resolve_aliases(update_data) if update_data else None
+        aliased_match = cls._serialize_for_api(match)
+        aliased_create_data = cls._serialize_for_api(create_data) if create_data else None
+        aliased_update_data = cls._serialize_for_api(update_data) if update_data else None
         async with _get_client() as client:
             result = await client.create_or_update(
                 typename=cls._typename,
