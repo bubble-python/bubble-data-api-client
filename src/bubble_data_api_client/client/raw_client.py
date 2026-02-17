@@ -2,6 +2,14 @@
 
 Use RawClient when you need direct control over API calls without ORM overhead.
 For most use cases, prefer BubbleModel which provides a higher-level interface.
+
+Known limitations:
+    Apps on the main (shared) cluster limit list fields sent via the Data API
+    to 200 items. This applies to create, update, and replace operations. The
+    limit can be raised up to 10,000 on dedicated instances. PATCH replaces the
+    entire list field value (no append operation exists), so chunking cannot work
+    around this limit.
+    https://manual.bubble.io/help-guides/bubble-for-enterprise/hosting-and-infrastructure/dedicated-instance/customizable-options
 """
 
 from __future__ import annotations
