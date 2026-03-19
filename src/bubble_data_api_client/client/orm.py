@@ -16,7 +16,9 @@ Then use async CRUD operations:
 
 from __future__ import annotations
 
+import asyncio
 import http
+import itertools
 import typing
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -31,6 +33,12 @@ from bubble_data_api_client.client.raw_client import AdditionalSortField, RawCli
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
 from bubble_data_api_client.types import BUILTIN_FIELDS, BubbleField, OnMultiple
+
+# default page size for paginated requests.
+_DEFAULT_PAGE_SIZE: int = 100
+
+# max UIDs per "in" constraint batch, matching the API's max page size.
+_MAX_IN_CONSTRAINT_SIZE: int = 100
 
 
 def _get_client() -> RawClient:
@@ -114,10 +122,16 @@ class BubbleModel(PydanticBaseModel):
         """Retrieve multiple things by their unique IDs, keyed by uid."""
         if not uids:
             return {}
-        items: list[typing.Self] = await cls.find(
-            constraints=[constraint(BubbleField.ID, ConstraintType.IN, uids)],
+        if len(uids) <= _MAX_IN_CONSTRAINT_SIZE:
+            items: list[typing.Self] = await cls.find_all(
+                constraints=[constraint(BubbleField.ID, ConstraintType.IN, uids)],
+            )
+            return {item.uid: item for item in items}
+        chunks = itertools.batched(uids, _MAX_IN_CONSTRAINT_SIZE, strict=False)
+        chunk_results: list[dict[str, typing.Self]] = await asyncio.gather(
+            *[cls.get_many(list(chunk)) for chunk in chunks],
         )
-        return {item.uid: item for item in items}
+        return {uid: item for result in chunk_results for uid, item in result.items()}
 
     async def save(self) -> None:
         """Persist all field changes to Bubble.
@@ -210,7 +224,7 @@ class BubbleModel(PydanticBaseModel):
         cls,
         *,
         constraints: list[Constraint] | None = None,
-        page_size: int = 100,
+        page_size: int = _DEFAULT_PAGE_SIZE,
         sort_field: str | None = None,
         descending: bool | None = None,
         additional_sort_fields: list[AdditionalSortField] | None = None,
@@ -240,7 +254,7 @@ class BubbleModel(PydanticBaseModel):
         cls,
         *,
         constraints: list[Constraint] | None = None,
-        page_size: int = 100,
+        page_size: int = _DEFAULT_PAGE_SIZE,
         sort_field: str | None = None,
         descending: bool | None = None,
         additional_sort_fields: list[AdditionalSortField] | None = None,
