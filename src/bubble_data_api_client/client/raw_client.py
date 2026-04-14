@@ -38,7 +38,14 @@ from bubble_data_api_client.types import (
     BulkCreateItemResult,
     CreateOrUpdateResult,
     OnMultiple,
+    PageResult,
 )
+
+# Bubble Data API returns 100 items per page by default and silently caps any
+# requested limit at 100 (no HTTP error, no warning). Verified empirically up
+# to limit=2,147,483,647 (int32 max).
+# https://manual.bubble.io/help-guides/integrations/api/the-bubble-api/the-data-api/data-api-requests
+_DEFAULT_PAGE_SIZE: int = 100
 
 
 # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#sorting
@@ -181,6 +188,73 @@ class RawClient:
             params["additional_sort_fields"] = json.dumps(additional_sort_fields)
 
         return await self._transport.get(f"/{typename}", params=params)
+
+    async def find_page(
+        self,
+        typename: str,
+        *,
+        constraints: list[Constraint] | None = None,
+        cursor: int = 0,
+        limit: int = _DEFAULT_PAGE_SIZE,
+        sort_field: str | None = None,
+        descending: bool | None = None,
+        additional_sort_fields: list[AdditionalSortField] | None = None,
+    ) -> PageResult[dict[str, typing.Any]]:
+        """Return one page of results with envelope metadata.
+
+        Unlike find(), this parses Bubble's response envelope so callers can
+        display total counts and drive pagination UIs without issuing a separate
+        count() call. The returned PageResult exposes cursor, remaining, and a
+        computed total derived from len(items) (which is robust to the edge
+        case where Bubble returns count=-1 for limit=-1).
+
+        Bubble Data API pagination limits to be aware of:
+
+        - limit is silently capped at 100 items. Requesting more returns
+          exactly 100 with HTTP 200; PageResult does not echo the
+          requested limit, so there is no way to accidentally advance a
+          cursor by a capped value. Use len(page.items) to advance.
+        - cursor + page size is capped at roughly 50,000 on shared
+          infrastructure (higher on Enterprise plans). Beyond this offset,
+          Bubble returns zero results but continues to report a non-zero
+          remaining, making PageResult.total under-report past the cap.
+        - For collections larger than the cursor cap, do not use offset
+          pagination. Use keyset pagination: sort by a monotonic field (e.g.
+          Created Date) with a greater-than constraint on the last-seen
+          value, resetting cursor to 0 on each request.
+
+        Args:
+            typename: The Bubble data type to query.
+            constraints: Filter conditions (use constraint() helper to build).
+            cursor: Pagination offset (0-indexed).
+            limit: Maximum results to return on this page.
+            sort_field: Field name to sort by.
+            descending: Sort in descending order if True.
+            additional_sort_fields: Secondary sort fields after the primary.
+
+        Returns:
+            PageResult with items as raw dicts plus envelope metadata.
+        """
+        response = await self.find(
+            typename,
+            constraints=constraints,
+            cursor=cursor,
+            limit=limit,
+            sort_field=sort_field,
+            descending=descending,
+            additional_sort_fields=additional_sort_fields,
+        )
+        body = response.json()["response"]
+        # Prefer the server-reported cursor over the requested value so
+        # PageResult is a pure reflection of server state. Bubble echoes
+        # cursor on every observed response; if it ever normalizes the
+        # value (e.g. a negative cursor to 0), this surfaces the difference
+        # immediately rather than silently returning wrong data.
+        return PageResult(
+            items=body["results"],
+            cursor=body["cursor"],
+            remaining=body["remaining"],
+        )
 
     async def count(
         self,

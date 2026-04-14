@@ -368,6 +368,222 @@ async def test_find_all_returns_list(configured_client: None) -> None:
 
 
 @respx.mock
+async def test_find_iter_breaks_on_empty_page_with_nonzero_remaining(configured_client: None) -> None:
+    """Regression: find_iter must not infinite-loop past Bubble's ~50k cursor cap.
+
+    Past the cursor cap, Bubble returns results=[] but continues to report a
+    nonzero remaining. A loop driven only by `remaining > 0` would never
+    advance (cursor += len(results) == 0) and would hang forever.
+    """
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    route = respx.get("https://example.com/user")
+    route.side_effect = [
+        # first page: real results, remaining still > 0 → loop continues
+        httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [{"_id": "1", "name": "Alice"}],
+                    "count": 1,
+                    "remaining": 500,
+                }
+            },
+        ),
+        # second page: EMPTY results, remaining STILL > 0 (simulates past the
+        # cursor cap). Loop must break on the empty page, not continue.
+        httpx.Response(
+            200,
+            json={
+                "response": {
+                    "results": [],
+                    "count": 0,
+                    "remaining": 500,
+                }
+            },
+        ),
+    ]
+
+    users = [u async for u in User.find_iter(page_size=1)]
+
+    assert len(users) == 1
+    assert users[0].name == "Alice"
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_find_page_returns_typed_models(configured_client: None) -> None:
+    """Verify find_page returns a PageResult of typed model instances."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    respx.get("https://example.com/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "cursor": 0,
+                    "results": [
+                        {"_id": "1", "name": "Alice"},
+                        {"_id": "2", "name": "Bob"},
+                    ],
+                    "count": 2,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+
+    page = await User.find_page()
+
+    assert len(page.items) == 2
+    assert all(isinstance(u, User) for u in page.items)
+    assert page.items[0].name == "Alice"
+    assert page.items[1].name == "Bob"
+    assert page.cursor == 0
+    assert page.remaining == 0
+    assert page.total == 2
+    assert page.has_more is False
+
+
+@respx.mock
+async def test_find_page_middle_page_computes_total(configured_client: None) -> None:
+    """Verify find_page computes total = cursor + len(items) + remaining."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    respx.get("https://example.com/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "cursor": 100,
+                    "results": [{"_id": str(i), "name": f"u{i}"} for i in range(10)],
+                    "count": 10,
+                    "remaining": 40,
+                }
+            },
+        )
+    )
+
+    page = await User.find_page(cursor=100, limit=50)
+
+    assert len(page.items) == 10
+    assert page.cursor == 100
+    assert page.remaining == 40
+    assert page.total == 150
+    assert page.has_more is True
+
+
+@respx.mock
+async def test_find_page_empty_result(configured_client: None) -> None:
+    """Verify find_page with zero matches returns an empty PageResult."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    respx.get("https://example.com/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={"response": {"cursor": 0, "results": [], "count": 0, "remaining": 0}},
+        )
+    )
+
+    page = await User.find_page()
+
+    assert page.items == []
+    assert page.total == 0
+    assert page.has_more is False
+
+
+@respx.mock
+async def test_find_page_translates_field_aliases(configured_client: None) -> None:
+    """Verify find_page validates items through model aliases."""
+
+    class Order(BubbleModel, typename="order"):
+        company: str = Field(alias="Buying company")
+
+    respx.get("https://example.com/order").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "cursor": 0,
+                    "results": [{"_id": "abc", "Buying company": "Acme Corp"}],
+                    "count": 1,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+
+    page = await Order.find_page()
+
+    assert len(page.items) == 1
+    assert page.items[0].company == "Acme Corp"
+    assert page.items[0].uid == "abc"
+
+
+@respx.mock
+async def test_find_page_forwards_params(configured_client: None) -> None:
+    """Verify find_page forwards constraints, sort, cursor, and limit."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    route = respx.get("https://example.com/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={"response": {"cursor": 20, "results": [], "count": 0, "remaining": 0}},
+        )
+    )
+
+    await User.find_page(
+        constraints=[{"key": "name", "constraint_type": "equals", "value": "Alice"}],
+        cursor=20,
+        limit=15,
+        sort_field="name",
+        descending=True,
+    )
+
+    assert route.call_count == 1
+    request_url = str(route.calls[0].request.url)
+    assert "cursor=20" in request_url
+    assert "limit=15" in request_url
+    assert "sort_field=name" in request_url
+    assert "descending=true" in request_url
+    assert "constraints" in request_url
+    assert "exclude_remaining" not in request_url
+
+
+@respx.mock
+async def test_find_page_default_params(configured_client: None) -> None:
+    """Verify find_page defaults to cursor=0, limit=100."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    route = respx.get("https://example.com/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={"response": {"cursor": 0, "results": [], "count": 0, "remaining": 0}},
+        )
+    )
+
+    page = await User.find_page()
+
+    assert route.call_count == 1
+    request_url = str(route.calls[0].request.url)
+    assert "cursor=0" in request_url
+    assert "limit=100" in request_url
+    assert page.cursor == 0
+
+
+@respx.mock
 async def test_refresh_updates_instance_in_place(configured_client: None) -> None:
     """Verify refresh() fetches data and updates the instance in place."""
 

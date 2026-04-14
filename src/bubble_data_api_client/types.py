@@ -1,5 +1,6 @@
 """Bubble platform types for use with Pydantic models."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -60,6 +61,45 @@ class BulkCreateItemResult(TypedDict):
     status: Literal["success", "error"]
     id: str | None
     message: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PageResult[T]:
+    """One page of results from a Bubble find query, with envelope metadata.
+
+    To advance pagination, use cursor + len(items), not any notion of page
+    size. Bubble silently caps requested limits at 100, so a caller who
+    requested more than 100 items must not assume they got what they asked
+    for; len(items) is always the correct advancement step.
+
+    Attributes:
+        items: Results for this page, in Bubble's returned order.
+        cursor: The cursor (offset) that produced this page, as reported
+            by Bubble's response envelope.
+        remaining: Number of matching records after this page.
+    """
+
+    items: list[T]
+    cursor: int
+    remaining: int
+
+    @property
+    def total(self) -> int:
+        """Return total number of records matching the query.
+
+        Computed as cursor + len(items) + remaining. This under-reports
+        past Bubble's ~50,000 cursor cap on shared infrastructure, where
+        Bubble returns an empty page with a non-zero remaining value. For
+        collections larger than the cap, use keyset pagination (sort by a
+        monotonic field with a greater-than constraint) rather than
+        offset pagination.
+        """
+        return self.cursor + len(self.items) + self.remaining
+
+    @property
+    def has_more(self) -> bool:
+        """Return True if there are more pages after this one."""
+        return self.remaining > 0
 
 
 def _validate_bubble_uid(value: str) -> str:

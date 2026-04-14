@@ -28,6 +28,7 @@ from bubble_data_api_client.types import (
     OnMultiple,
     OptionalBubbleUID,
     OptionalBubbleUIDs,
+    PageResult,
 )
 from bubble_data_api_client.validation import filter_bubble_uids, is_bubble_uid
 
@@ -56,6 +57,7 @@ __all__ = [
     "OnMultiple",
     "OptionalBubbleUID",
     "OptionalBubbleUIDs",
+    "PageResult",
     # validation
     "filter_bubble_uids",
     "is_bubble_uid",

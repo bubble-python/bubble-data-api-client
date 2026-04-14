@@ -29,13 +29,14 @@ if TYPE_CHECKING:
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
-from bubble_data_api_client.client.raw_client import AdditionalSortField, RawClient
+from bubble_data_api_client.client.raw_client import (
+    _DEFAULT_PAGE_SIZE,
+    AdditionalSortField,
+    RawClient,
+)
 from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
 from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
-from bubble_data_api_client.types import BUILTIN_FIELDS, BubbleField, OnMultiple
-
-# default page size for paginated requests.
-_DEFAULT_PAGE_SIZE: int = 100
+from bubble_data_api_client.types import BUILTIN_FIELDS, BubbleField, OnMultiple, PageResult
 
 # max UIDs per "in" constraint batch, matching the API's max page size.
 _MAX_IN_CONSTRAINT_SIZE: int = 100
@@ -220,6 +221,55 @@ class BubbleModel(PydanticBaseModel):
             return [cls.model_validate(item) for item in response.json()["response"]["results"]]
 
     @classmethod
+    async def find_page(
+        cls,
+        *,
+        constraints: list[Constraint] | None = None,
+        cursor: int = 0,
+        limit: int = _DEFAULT_PAGE_SIZE,
+        sort_field: str | None = None,
+        descending: bool | None = None,
+        additional_sort_fields: list[AdditionalSortField] | None = None,
+    ) -> PageResult[typing.Self]:
+        """Return one page of matching records with envelope metadata.
+
+        Unlike find(), this preserves Bubble's response envelope so callers
+        can display total counts and drive pagination UIs without issuing a
+        separate count() call.
+
+        See RawClient.find_page for important caveats about Bubble's
+        pagination limits: the 100-item silent cap on limit, the ~50,000
+        cursor cap on shared infrastructure, and the recommended keyset
+        pagination workaround for collections larger than the cursor cap.
+
+        Args:
+            constraints: Filter conditions (use constraint() helper to build).
+            cursor: Pagination offset (0-indexed).
+            limit: Maximum results to return on this page.
+            sort_field: Field name to sort by.
+            descending: Sort in descending order if True.
+            additional_sort_fields: Secondary sort fields after the primary.
+
+        Returns:
+            PageResult with typed model instances plus envelope metadata.
+        """
+        async with _get_client() as client:
+            page = await client.find_page(
+                cls._typename,
+                constraints=constraints,
+                cursor=cursor,
+                limit=limit,
+                sort_field=sort_field,
+                descending=descending,
+                additional_sort_fields=additional_sort_fields,
+            )
+            return PageResult(
+                items=[cls.model_validate(item) for item in page.items],
+                cursor=page.cursor,
+                remaining=page.remaining,
+            )
+
+    @classmethod
     async def find_iter(
         cls,
         *,
@@ -229,7 +279,15 @@ class BubbleModel(PydanticBaseModel):
         descending: bool | None = None,
         additional_sort_fields: list[AdditionalSortField] | None = None,
     ) -> AsyncIterator[typing.Self]:
-        """Iterate through all matching records with constant memory usage."""
+        """Iterate through all matching records with constant memory usage.
+
+        Offset pagination is capped at ~50,000 on Bubble's shared
+        infrastructure. For collections larger than that cap, prefer
+        keyset pagination (a Created Date constraint) instead of this
+        method, which will stop short at the cap. The empty-page guard
+        below prevents an infinite loop when the cursor reaches the cap
+        (Bubble continues to report a non-zero remaining past the cap).
+        """
         cursor: int = 0
         async with _get_client() as client:
             while True:
@@ -245,6 +303,11 @@ class BubbleModel(PydanticBaseModel):
                 body = response.json()["response"]
                 for item in body["results"]:
                     yield cls.model_validate(item)
+                # stop on empty page first: past the cursor cap Bubble can
+                # return zero results while still reporting remaining > 0,
+                # which would otherwise cause an infinite loop.
+                if not body["results"]:
+                    break
                 if body["remaining"] == 0:
                     break
                 cursor += len(body["results"])

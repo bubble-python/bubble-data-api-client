@@ -164,6 +164,167 @@ async def test_count(configured_client: None) -> None:
 
 
 @respx.mock
+async def test_find_page_single_page(configured_client: None) -> None:
+    """Test find_page returns a PageResult with items and envelope metadata."""
+    respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "cursor": 0,
+                    "results": [{"_id": "a1"}, {"_id": "a2"}, {"_id": "a3"}],
+                    "count": 3,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+
+    async with raw_client.RawClient() as client:
+        page = await client.find_page(typename="customer")
+
+    assert len(page.items) == 3
+    assert page.cursor == 0
+    assert page.remaining == 0
+    assert page.total == 3
+    assert page.has_more is False
+
+
+@respx.mock
+async def test_find_page_middle_page_computes_total(configured_client: None) -> None:
+    """Test find_page total is cursor + len(items) + remaining."""
+    respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "cursor": 100,
+                    "results": [{"_id": f"a{i}"} for i in range(50)],
+                    "count": 50,
+                    "remaining": 400,
+                }
+            },
+        )
+    )
+
+    async with raw_client.RawClient() as client:
+        page = await client.find_page(typename="customer", cursor=100, limit=50)
+
+    assert len(page.items) == 50
+    assert page.cursor == 100
+    assert page.remaining == 400
+    assert page.total == 550
+    assert page.has_more is True
+
+
+@respx.mock
+async def test_find_page_last_partial_page(configured_client: None) -> None:
+    """Test find_page on a last partial page: has_more is False, total correct."""
+    respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "cursor": 97,
+                    "results": [{"_id": "a1"}, {"_id": "a2"}, {"_id": "a3"}],
+                    "count": 3,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+
+    async with raw_client.RawClient() as client:
+        page = await client.find_page(typename="customer", cursor=97, limit=50)
+
+    assert len(page.items) == 3
+    assert page.cursor == 97
+    assert page.total == 100
+    assert page.has_more is False
+
+
+@respx.mock
+async def test_find_page_empty_result(configured_client: None) -> None:
+    """Test find_page with zero matches returns empty PageResult."""
+    respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={"response": {"cursor": 0, "results": [], "count": 0, "remaining": 0}},
+        )
+    )
+
+    async with raw_client.RawClient() as client:
+        page = await client.find_page(typename="customer")
+
+    assert page.items == []
+    assert page.cursor == 0
+    assert page.remaining == 0
+    assert page.total == 0
+    assert page.has_more is False
+
+
+@respx.mock
+async def test_find_page_reads_cursor_from_server_envelope(configured_client: None) -> None:
+    """Verify find_page uses the cursor reported by Bubble, not the echoed request.
+
+    In practice Bubble echoes the requested cursor, but find_page is
+    documented to reflect server state. If Bubble ever normalizes the
+    value (e.g. a negative cursor to 0), PageResult.cursor should
+    reflect that normalization, not hide it.
+    """
+    # server returns a cursor different from what we requested
+    respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "response": {
+                    "cursor": 7,  # server-normalized value (simulated)
+                    "results": [{"_id": "a1"}],
+                    "count": 1,
+                    "remaining": 0,
+                }
+            },
+        )
+    )
+
+    async with raw_client.RawClient() as client:
+        page = await client.find_page(typename="customer", cursor=42)
+
+    assert page.cursor == 7  # server value, not the requested 42
+
+
+@respx.mock
+async def test_find_page_forwards_params(configured_client: None) -> None:
+    """Test find_page forwards cursor, limit, sort, and constraints; never sends exclude_remaining."""
+    route = respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(
+            200,
+            json={"response": {"cursor": 50, "results": [], "count": 0, "remaining": 0}},
+        )
+    )
+
+    async with raw_client.RawClient() as client:
+        await client.find_page(
+            typename="customer",
+            constraints=[{"key": "status", "constraint_type": "equals", "value": "active"}],
+            cursor=50,
+            limit=25,
+            sort_field="Created Date",
+            descending=True,
+        )
+
+    assert route.call_count == 1
+    request_url = str(route.calls[0].request.url)
+    assert "cursor=50" in request_url
+    assert "limit=25" in request_url
+    assert "descending=true" in request_url
+    assert "constraints" in request_url
+    # find_page's contract is to return envelope metadata, so exclude_remaining
+    # must never be sent.
+    assert "exclude_remaining" not in request_url
+
+
+@respx.mock
 async def test_exists_by_uid_found(configured_client: None) -> None:
     """Test exists returns True when record found by uid."""
     respx.get("https://example.com/customer/123x456").mock(
