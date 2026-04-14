@@ -1,15 +1,51 @@
 [project]
 name = "bubble-data-api-client"
 version = "0.7.0"
-description = "Async Python client for Bubble Data API with Pydantic ORM, type safety, connection pooling, and configurable retries"
+description = "Query your Bubble.io database from Python with an async client and Pydantic ORM. Type-safe CRUD for the Bubble Data API with connection pooling and retries."
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.12"
-keywords = ["bubble", "bubble.io", "async", "pydantic", "orm", "api"]
+keywords = [
+    "bubble",
+    "bubble.io",
+    "bubble-api",
+    "bubbleio",
+    "async",
+    "asyncio",
+    "pydantic",
+    "orm",
+    "api",
+    "sdk",
+    "client",
+    "data-api",
+    "rest-api",
+    "typed",
+    "crud",
+    "database",
+    "integration",
+    "etl",
+    "httpx",
+    "low-code",
+    "nocode",
+]
 classifiers = [
-    "Programming Language :: Python :: 3.14",
-    "Programming Language :: Python :: 3.13",
+    "Framework :: AsyncIO",
+    "Framework :: Pydantic",
+    "Framework :: Pydantic :: 2",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
 dependencies = [

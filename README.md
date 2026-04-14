@@ -1,12 +1,15 @@
 
 # bubble-data-api-client
 
-[![Downloads](https://static.pepy.tech/badge/bubble-data-api-client/month)](https://pepy.tech/project/bubble-data-api-client)
+[![PyPI](https://img.shields.io/pypi/v/bubble-data-api-client)](https://pypi.org/project/bubble-data-api-client/)
 [![Python Version](https://img.shields.io/pypi/pyversions/bubble-data-api-client)](https://pypi.org/project/bubble-data-api-client/)
 [![License](https://img.shields.io/pypi/l/bubble-data-api-client)](https://pypi.org/project/bubble-data-api-client/)
-[![PyPI](https://img.shields.io/pypi/v/bubble-data-api-client)](https://pypi.org/project/bubble-data-api-client/)
+[![CI](https://img.shields.io/github/actions/workflow/status/bubble-python/bubble-data-api-client/test.yml?branch=main&label=tests)](https://github.com/bubble-python/bubble-data-api-client/actions/workflows/test.yml)
+[![Downloads](https://static.pepy.tech/badge/bubble-data-api-client/month)](https://pepy.tech/project/bubble-data-api-client)
+[![Pydantic v2](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/pydantic/pydantic/main/docs/badge/v2.json)](https://pydantic.dev)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-A fast, async Python client for the [Bubble Data API](https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api) with a Pydantic-based ORM and connection pooling.
+**Query your Bubble.io database from Python.** A fast, async client and Pydantic ORM for the [Bubble Data API](https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api), with type-safe CRUD, connection pooling, and configurable retries.
 
 ## Why use this?
 
@@ -102,11 +105,12 @@ The library handles Bubble's API quirks automatically:
 Bubble doesn't enforce unique constraints, so duplicates can occur. The `create_or_update` method provides strategies to handle this:
 
 ```python
-# If duplicates exist, keep the oldest and delete the rest
+# if duplicates exist, keep the oldest (by created date) and delete the rest
 user, created = await User.create_or_update(
     match={"external_id": "ext-123"},
-    data={"name": "Canonical Name"},
-    on_multiple=OnMultiple.DEDUPE_OLDEST,
+    create_data={"name": "Canonical Name"},
+    update_data={"name": "Canonical Name"},
+    on_multiple=OnMultiple.DEDUPE_OLDEST_CREATED,
 )
 ```
 
@@ -222,11 +226,14 @@ from bubble_data_api_client import OnMultiple
 # basic upsert, matches by external_id and creates if not found
 user, created = await User.create_or_update(
     match={"external_id": "ext-123"},
-    data={"name": "Updated Name", "email": "new@example.com"},
+    create_data={"name": "New User", "email": "new@example.com"},
+    update_data={"email": "new@example.com"},
     on_multiple=OnMultiple.ERROR,
 )
 # returns (User, bool): the instance and whether it was created
 ```
+
+`match` fields locate the record. `create_data` is merged with `match` when inserting a new record; `update_data` is applied when a record already exists. At least one of `create_data` or `update_data` must be provided.
 
 ### Duplicate Handling Strategies
 
@@ -237,15 +244,18 @@ Since Bubble doesn't enforce unique constraints, duplicates can occur. Choose ho
 | `OnMultiple.ERROR` | Raise `MultipleMatchesError` (fail-fast) |
 | `OnMultiple.UPDATE_FIRST` | Update first match (arbitrary order) |
 | `OnMultiple.UPDATE_ALL` | Update all matches concurrently |
-| `OnMultiple.DEDUPE_OLDEST` | Keep oldest record, delete others, then update |
-| `OnMultiple.DEDUPE_NEWEST` | Keep newest record, delete others, then update |
+| `OnMultiple.DEDUPE_OLDEST_CREATED` | Keep oldest by Created Date, delete others, then update |
+| `OnMultiple.DEDUPE_NEWEST_CREATED` | Keep newest by Created Date, delete others, then update |
+| `OnMultiple.DEDUPE_OLDEST_MODIFIED` | Keep oldest by Modified Date, delete others, then update |
+| `OnMultiple.DEDUPE_NEWEST_MODIFIED` | Keep newest by Modified Date, delete others, then update |
 
 ```python
-# auto-deduplicate, keeping the oldest record
+# auto-deduplicate, keeping the oldest record by Created Date
 user, created = await User.create_or_update(
     match={"external_id": "ext-123"},
-    data={"name": "Canonical Name"},
-    on_multiple=OnMultiple.DEDUPE_OLDEST,
+    create_data={"name": "Canonical Name"},
+    update_data={"name": "Canonical Name"},
+    on_multiple=OnMultiple.DEDUPE_OLDEST_CREATED,
 )
 ```
 
@@ -406,12 +416,47 @@ if user is None:
 try:
     user, created = await User.create_or_update(
         match={"external_id": "ext-123"},
-        data={"name": "Test"},
+        create_data={"name": "Test"},
+        update_data={"name": "Test"},
         on_multiple=OnMultiple.ERROR,
     )
 except MultipleMatchesError as e:
     print(f"Found {e.count} duplicates for {e.match}")
 ```
+
+## FAQ
+
+### How do I connect to a Bubble.io app from Python?
+
+Install the package, then call `configure()` with your Bubble Data API root URL and API key. See [Quick Start](#quick-start). The Data API must be enabled in your Bubble app under Settings → API.
+
+### How do I query Bubble.io records by field value from Python?
+
+Use `find()` (or `find_all()` / `find_iter()`) with a list of `constraint(...)` objects. Each constraint takes a field name, a `ConstraintType`, and a value. See [Constraints](#constraints) for the full operator list.
+
+### How do I handle Bubble Data API pagination?
+
+The library handles pagination for you. Use `find_all()` to collect every matching record into a list, or `find_iter()` to stream records with constant memory. Both walk all pages internally. Use `find()` only if you want manual `cursor` / `limit` control. See [Querying Records](#querying-records).
+
+### Does this support upserts?
+
+Yes. `create_or_update()` matches by any field, creates if missing, updates if found, and offers configurable strategies for handling Bubble's lack of unique constraints (error, update first, update all, dedupe oldest, dedupe newest). See [Smart Upserts](#smart-upserts).
+
+### Can I use this with FastAPI, Starlette, or other async frameworks?
+
+Yes. The library is async-first and reuses HTTP connections per event loop, so it drops into any `asyncio`-based framework without extra configuration. Call the model methods directly from your route handlers.
+
+### Can I use this in synchronous Python code?
+
+Yes, by wrapping calls in `asyncio.run()` or running an async block. See [Usage in Sync Contexts](#usage-in-sync-contexts).
+
+### How do I handle Bubble.io rate limits and retries?
+
+Pass a `tenacity.AsyncRetrying` policy to `configure(retry=...)`. You control the wait strategy, attempt count, and which exceptions to retry. See [Retry Configuration](#retry-configuration).
+
+### What Python versions are supported?
+
+Python 3.12 and newer. The library uses modern type-hint syntax and async features that require 3.12+.
 
 ## License
 
