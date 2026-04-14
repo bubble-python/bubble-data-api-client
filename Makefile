@@ -23,6 +23,10 @@ test-integration:
 coverage:
 	coverage run -m pytest && coverage report
 
+# audit dependencies for known vulnerabilities
+audit:
+	pip-audit
+
 check-updates:
 	uv pip list --outdated
 

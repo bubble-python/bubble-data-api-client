@@ -35,6 +35,7 @@ dev = [
     "pre-commit~=4.5",
     "pyright~=1.1.407",
     "pypistats~=1.7",
+    "pip-audit~=2.9",
 ]
 
 # ruff configuration
