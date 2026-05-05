@@ -1,6 +1,14 @@
+import json
+import urllib.parse
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from enum import Enum, IntEnum
+from uuid import UUID
+
 import httpx
 import pytest
 import respx
+from pydantic_core import PydanticSerializationError
 
 from bubble_data_api_client import BubbleAPIError
 from bubble_data_api_client.client import raw_client
@@ -130,6 +138,141 @@ async def test_find_with_parameters(configured_client: None) -> None:
     assert "sort_field=name" in str(request.url)
     assert "descending=true" in str(request.url)
     assert "exclude_remaining=true" in str(request.url)
+
+
+@respx.mock
+async def test_find_serializes_datetime_constraint_value(configured_client: None) -> None:
+    """Verify tz-aware datetime constraint values become ISO 8601 strings (Z-suffixed for UTC)."""
+    route = respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    )
+
+    modified_after = datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC)
+    async with raw_client.RawClient() as client:
+        await client.find(
+            typename="customer",
+            constraints=[{"key": "Modified Date", "constraint_type": "greater than", "value": modified_after}],
+        )
+
+    constraints_param = urllib.parse.parse_qs(route.calls[0].request.url.query.decode())["constraints"][0]
+    assert "2025-01-15T14:30:00Z" in constraints_param
+
+
+@respx.mock
+async def test_find_serializes_date_constraint_value(configured_client: None) -> None:
+    """Verify date constraint values become ISO 8601 strings in the URL."""
+    route = respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    )
+
+    cutoff = date(2025, 1, 15)
+    async with raw_client.RawClient() as client:
+        await client.find(
+            typename="customer",
+            constraints=[{"key": "birthday", "constraint_type": "less than", "value": cutoff}],
+        )
+
+    constraints_param = urllib.parse.parse_qs(route.calls[0].request.url.query.decode())["constraints"][0]
+    assert cutoff.isoformat() in constraints_param
+
+
+@respx.mock
+async def test_find_serializes_datetimes_in_in_constraint(configured_client: None) -> None:
+    """Verify datetime values nested inside an IN constraint list are converted."""
+    route = respx.get("https://example.com/customer").mock(
+        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    )
+
+    a = datetime(2025, 1, 1, tzinfo=UTC)
+    b = datetime(2025, 6, 1, tzinfo=UTC)
+    async with raw_client.RawClient() as client:
+        await client.find(
+            typename="customer",
+            constraints=[{"key": "Created Date", "constraint_type": "in", "value": [a, b]}],
+        )
+
+    constraints_param = urllib.parse.parse_qs(route.calls[0].request.url.query.decode())["constraints"][0]
+    assert "2025-01-01T00:00:00Z" in constraints_param
+    assert "2025-06-01T00:00:00Z" in constraints_param
+
+
+@respx.mock
+async def test_find_serializes_decimal_constraint_value(configured_client: None) -> None:
+    """Verify Decimal constraint values become strings in the URL (matches pydantic body path)."""
+    route = respx.get("https://example.com/product").mock(
+        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    )
+
+    price = Decimal("9.99")
+    async with raw_client.RawClient() as client:
+        await client.find(
+            typename="product",
+            constraints=[{"key": "price", "constraint_type": "greater than", "value": price}],
+        )
+
+    constraints_param = urllib.parse.parse_qs(route.calls[0].request.url.query.decode())["constraints"][0]
+    assert '"9.99"' in constraints_param
+
+
+@respx.mock
+async def test_find_serializes_uuid_constraint_value(configured_client: None) -> None:
+    """Verify UUID constraint values become canonical hex strings in the URL."""
+    route = respx.get("https://example.com/event").mock(
+        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    )
+
+    external_id = UUID("12345678-1234-5678-1234-567812345678")
+    async with raw_client.RawClient() as client:
+        await client.find(
+            typename="event",
+            constraints=[{"key": "external_id", "constraint_type": "equals", "value": external_id}],
+        )
+
+    constraints_param = urllib.parse.parse_qs(route.calls[0].request.url.query.decode())["constraints"][0]
+    assert str(external_id) in constraints_param
+
+
+@respx.mock
+async def test_find_serializes_enum_constraint_value(configured_client: None) -> None:
+    """Verify plain Enum members serialize via their .value (IntEnum/StrEnum already serialize natively)."""
+
+    class Status(Enum):
+        ACTIVE = "active"
+
+    class Priority(IntEnum):
+        HIGH = 1
+
+    route = respx.get("https://example.com/order").mock(
+        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    )
+
+    async with raw_client.RawClient() as client:
+        await client.find(
+            typename="order",
+            constraints=[
+                {"key": "status", "constraint_type": "equals", "value": Status.ACTIVE},
+                {"key": "priority", "constraint_type": "equals", "value": Priority.HIGH},
+            ],
+        )
+
+    constraints_param = urllib.parse.parse_qs(route.calls[0].request.url.query.decode())["constraints"][0]
+    parsed = json.loads(constraints_param)
+    assert parsed[0]["value"] == "active"
+    assert parsed[1]["value"] == 1
+
+
+async def test_find_rejects_unsupported_constraint_value_type(configured_client: None) -> None:
+    """Verify pydantic raises a clear serialization error for genuinely unsupported types."""
+
+    class Unsupported:
+        pass
+
+    async with raw_client.RawClient() as client:
+        with pytest.raises(PydanticSerializationError, match="Unable to serialize"):
+            await client.find(
+                typename="customer",
+                constraints=[{"key": "x", "constraint_type": "equals", "value": Unsupported()}],
+            )
 
 
 @respx.mock

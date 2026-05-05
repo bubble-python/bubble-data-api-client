@@ -21,9 +21,14 @@ class BaseConstraint(typing.TypedDict):
 
 
 class Constraint(BaseConstraint, total=False):
-    """A query constraint with optional value for filtering results."""
+    """A query constraint with optional value for filtering results.
 
-    value: str
+    ``value`` is intentionally untyped: Bubble accepts strings, numbers,
+    booleans, lists (``in``), dicts (``geographic_search``), and datetimes
+    (serialized to ISO 8601 by the client).
+    """
+
+    value: typing.Any
 
 
 def constraint(

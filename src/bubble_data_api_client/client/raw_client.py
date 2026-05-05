@@ -20,6 +20,8 @@ import json
 import typing
 from typing import TYPE_CHECKING
 
+from pydantic import TypeAdapter
+
 if TYPE_CHECKING:
     import types
 
@@ -46,6 +48,11 @@ from bubble_data_api_client.types import (
 # to limit=2,147,483,647 (int32 max).
 # https://manual.bubble.io/help-guides/integrations/api/the-bubble-api/the-data-api/data-api-requests
 _DEFAULT_PAGE_SIZE: int = 100
+
+
+# reuse pydantic's mode=json conversions so query parameters serialize the
+# same way as request bodies (datetime->ISO 8601, Decimal/UUID->str, Enum->value).
+_jsonable: TypeAdapter[typing.Any] = TypeAdapter(typing.Any)
 
 
 # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#sorting
@@ -173,7 +180,7 @@ class RawClient:
         params: dict[str, str] = {}
 
         if constraints is not None:
-            params["constraints"] = json.dumps(constraints)
+            params["constraints"] = json.dumps(_jsonable.dump_python(constraints, mode="json"))
         if cursor is not None:
             params["cursor"] = str(cursor)
         if limit is not None:
@@ -185,7 +192,7 @@ class RawClient:
         if exclude_remaining is not None:
             params["exclude_remaining"] = "true" if exclude_remaining else "false"
         if additional_sort_fields is not None:
-            params["additional_sort_fields"] = json.dumps(additional_sort_fields)
+            params["additional_sort_fields"] = json.dumps(_jsonable.dump_python(additional_sort_fields, mode="json"))
 
         return await self._transport.get(f"/{typename}", params=params)
 
