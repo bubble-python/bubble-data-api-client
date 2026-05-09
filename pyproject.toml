@@ -1,6 +1,6 @@
 [project]
 name = "bubble-data-api-client"
-version = "0.8.0"
+version = "0.9.0"
 description = "Query your Bubble.io database from Python with an async client and Pydantic ORM. Type-safe CRUD for the Bubble Data API with connection pooling and retries."
 license = "MIT"
 readme = "README.md"
