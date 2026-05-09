@@ -31,10 +31,14 @@ from pydantic import Field
 
 from bubble_data_api_client.client.raw_client import (
     _DEFAULT_PAGE_SIZE,
-    AdditionalSortField,
     RawClient,
 )
-from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
+from bubble_data_api_client.constraints import (
+    AdditionalSortField,
+    Constraint,
+    ConstraintType,
+    constraint,
+)
 from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
 from bubble_data_api_client.types import BUILTIN_FIELDS, BubbleField, OnMultiple, PageResult
 

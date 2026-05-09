@@ -27,7 +27,12 @@ if TYPE_CHECKING:
 
     import httpx
 
-from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
+from bubble_data_api_client.constraints import (
+    AdditionalSortField,
+    Constraint,
+    ConstraintType,
+    constraint,
+)
 from bubble_data_api_client.exceptions import (
     BubbleAPIError,
     InvalidOnMultipleError,
@@ -53,16 +58,6 @@ _DEFAULT_PAGE_SIZE: int = 100
 # reuse pydantic's mode=json conversions so query parameters serialize the
 # same way as request bodies (datetime->ISO 8601, Decimal/UUID->str, Enum->value).
 _jsonable: TypeAdapter[typing.Any] = TypeAdapter(typing.Any)
-
-
-# https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#sorting
-# in addition to 'sort_field' and 'descending', it is possible to have
-# multiple additional sort fields
-class AdditionalSortField(typing.TypedDict):
-    """Secondary sort field for multi-field sorting in find queries."""
-
-    sort_field: str
-    descending: bool
 
 
 class RawClient:

@@ -18,7 +18,13 @@ from bubble_data_api_client.config import (
     configure,
     set_config_provider,
 )
-from bubble_data_api_client.constraints import Constraint, ConstraintType, constraint
+from bubble_data_api_client.constraints import (
+    AdditionalSortField,
+    Constraint,
+    ConstraintType,
+    constraint,
+    sort_by,
+)
 from bubble_data_api_client.exceptions import BubbleAPIError
 from bubble_data_api_client.pool import client_scope, close_clients
 from bubble_data_api_client.types import (
@@ -44,9 +50,11 @@ __all__ = [
     # exceptions
     "BubbleAPIError",
     # query building
+    "AdditionalSortField",
     "Constraint",
     "ConstraintType",
     "constraint",
+    "sort_by",
     # client lifecycle
     "client_scope",
     "close_clients",
