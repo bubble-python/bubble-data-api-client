@@ -23,6 +23,83 @@ def test_model_instantiation():
     assert user.name == "testuser"
 
 
+def test_bubble_field_returns_custom_string_alias() -> None:
+    """Subclass-declared string alias is returned verbatim."""
+
+    class User(BubbleModel, typename="user"):
+        first_name: str | None = Field(default=None, alias="firstName")
+
+    assert User.bubble_field("first_name") == "firstName"
+
+
+def test_bubble_field_returns_alias_with_literal_space() -> None:
+    """Aliases containing spaces (common in Bubble) round-trip cleanly."""
+
+    class User(BubbleModel, typename="user"):
+        main_company: str | None = Field(default=None, alias="main company")
+
+    assert User.bubble_field("main_company") == "main company"
+
+
+def test_bubble_field_returns_string_for_builtin_fields() -> None:
+    """Built-in fields return plain strings, not BubbleField enums.
+
+    Regression: prior to the fix, the base class declared aliases as
+    ``Field(alias=BubbleField.ID)`` (an enum), forcing consumers to coerce.
+    Aliases are now uniformly ``str``.
+    """
+
+    class User(BubbleModel, typename="user"):
+        pass
+
+    uid_alias = User.bubble_field("uid")
+    assert uid_alias == "_id"
+    assert type(uid_alias) is str
+
+    created_alias = User.bubble_field("created_date")
+    assert created_alias == "Created Date"
+    assert type(created_alias) is str
+
+    assert User.bubble_field("modified_date") == "Modified Date"
+    assert User.bubble_field("slug") == "Slug"
+
+
+def test_bubble_field_falls_back_to_python_name_when_no_alias() -> None:
+    """Fields without an explicit alias return the python attribute name.
+
+    Matches Pydantic's ``by_alias=True`` serialization behavior so the helper
+    always reflects what's actually sent to Bubble.
+    """
+
+    class User(BubbleModel, typename="user"):
+        status: str | None = None
+
+    assert User.bubble_field("status") == "status"
+
+
+def test_bubble_field_raises_unknown_field_error_for_typo() -> None:
+    """Typos in the python attribute name fail loudly with the library's typed exception."""
+
+    class User(BubbleModel, typename="user"):
+        first_name: str | None = Field(default=None, alias="firstName")
+
+    with pytest.raises(UnknownFieldError, match="unknown field: frist_name"):
+        User.bubble_field("frist_name")
+
+
+def test_bubble_field_works_at_class_level_without_instance() -> None:
+    """Helper is a classmethod usable at module import time."""
+
+    class User(BubbleModel, typename="user"):
+        first_name: str | None = Field(default=None, alias="firstName")
+
+    sort_map: dict[str, str] = {
+        "FIRST_NAME": User.bubble_field("first_name"),
+        "CREATED_DATE": User.bubble_field("created_date"),
+    }
+    assert sort_map == {"FIRST_NAME": "firstName", "CREATED_DATE": "Created Date"}
+
+
 @respx.mock
 async def test_save_uses_field_aliases(configured_client: None) -> None:
     """Verify save() sends Bubble aliases, not Python field names."""
@@ -30,7 +107,7 @@ async def test_save_uses_field_aliases(configured_client: None) -> None:
     class Order(BubbleModel, typename="order"):
         company: str = Field(alias="Buying company")
 
-    order = Order(**{"Buying company": "Acme Corp", "_id": "abc123"})
+    order = Order.model_validate({"Buying company": "Acme Corp", "_id": "abc123"})
 
     route = respx.patch("https://example.com/order/abc123").mock(return_value=httpx.Response(204))
 

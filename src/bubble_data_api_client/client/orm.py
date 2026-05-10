@@ -55,24 +55,28 @@ class BubbleModel(PydanticBaseModel):
 
     _typename: typing.ClassVar[str]
 
+    # aliases are spelled as plain strings (via .value) so that
+    # cls.model_fields[name].alias is uniformly a `str` for callers, matching
+    # the shape used by subclass-declared fields. BubbleField stays the single
+    # source of truth for the literals.
     uid: str = Field(
         ...,
-        alias=BubbleField.ID,
+        alias=BubbleField.ID.value,
         description="Unique ID in format '{timestamp}x{random}' that identifies this record.",
     )
     created_date: datetime | None = Field(
         default=None,
-        alias=BubbleField.CREATED_DATE,
+        alias=BubbleField.CREATED_DATE.value,
         description="Creation date of this record. Never changes.",
     )
     modified_date: datetime | None = Field(
         default=None,
-        alias=BubbleField.MODIFIED_DATE,
+        alias=BubbleField.MODIFIED_DATE.value,
         description="Automatically updated when any changes are made to this record.",
     )
     slug: str | None = Field(
         default=None,
-        alias=BubbleField.SLUG,
+        alias=BubbleField.SLUG.value,
         description="User-friendly and SEO-optimized URL for this record.",
     )
 
@@ -80,6 +84,30 @@ class BubbleModel(PydanticBaseModel):
         """Register the Bubble type name for this model subclass."""
         super().__init_subclass__(**kwargs)
         cls._typename = typename
+
+    @classmethod
+    def bubble_field(cls, name: str) -> str:
+        """Return the raw Bubble field name for a python attribute.
+
+        Useful when building constraints, sort fields, or dispatch tables
+        from Python attribute names without restating the Bubble alias at
+        every call site.
+
+        Args:
+            name: A python attribute name on this model (e.g. ``"first_name"``).
+
+        Returns:
+            The Bubble field name. The declared ``Field(alias=...)`` if
+            present, otherwise the python attribute name unchanged (matching
+            Pydantic's ``by_alias=True`` serialization behavior).
+
+        Raises:
+            UnknownFieldError: ``name`` is not a field on this model.
+        """
+        field_info = cls.model_fields.get(name)
+        if field_info is None:
+            raise UnknownFieldError(name)
+        return field_info.alias if field_info.alias is not None else name
 
     @classmethod
     def _serialize_for_api(cls, data: dict[str, typing.Any]) -> dict[str, typing.Any]:

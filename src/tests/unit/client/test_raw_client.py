@@ -527,4 +527,8 @@ async def test_exists_uid_and_constraints_raises(configured_client: None) -> Non
     """Test exists raises when both uid and constraints provided."""
     async with raw_client.RawClient() as client:
         with pytest.raises(ValueError, match="Cannot specify both"):
-            await client.exists(typename="customer", uid="123x456", constraints=[{"key": "x"}])
+            await client.exists(
+                typename="customer",
+                uid="123x456",
+                constraints=[{"key": "x", "constraint_type": "equals"}],
+            )

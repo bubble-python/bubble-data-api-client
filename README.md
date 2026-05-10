@@ -279,6 +279,24 @@ results = await User.find(constraints=constraints)
 
 Available constraint types: `EQUALS`, `NOT_EQUAL`, `IS_EMPTY` (any field), `IS_NOT_EMPTY` (any field), `TEXT_CONTAINS`, `NOT_TEXT_CONTAINS`, `GREATER_THAN`, `LESS_THAN`, `IN`, `NOT_IN`, `CONTAINS`, `NOT_CONTAINS`, `EMPTY` (list fields), `NOT_EMPTY` (list fields), `GEOGRAPHIC_SEARCH`.
 
+### Field Name Introspection
+
+When a model declares `Field(alias=...)`, `bubble_field()` returns the Bubble field name for a Python attribute, avoiding restating alias strings at every call site:
+
+```python
+from pydantic import Field
+
+class User(BubbleModel, typename="user"):
+    first_name: str | None = Field(default=None, alias="firstName")
+    last_name: str | None = Field(default=None, alias="lastName")
+
+User.bubble_field("first_name")    # "firstName"
+User.bubble_field("created_date")  # "Created Date"
+User.bubble_field("typo")          # raises UnknownFieldError
+```
+
+For fields without an alias, the Python attribute name is returned unchanged.
+
 ## Querying Records
 
 Three methods for fetching records, depending on your needs:
