@@ -3,15 +3,17 @@ import urllib.parse
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum, IntEnum
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-import httpx
 import pytest
-import respx
 from pydantic_core import PydanticSerializationError
 
 from bubble_data_api_client import BubbleAPIError
 from bubble_data_api_client.client import raw_client
+
+if TYPE_CHECKING:
+    import respx
 
 
 async def test_raw_client_init() -> None:
@@ -29,10 +31,9 @@ async def test_raw_client_init() -> None:
         assert isinstance(client_instance, raw_client.RawClient)
 
 
-@respx.mock
-async def test_replace(configured_client: None) -> None:
+async def test_replace(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test that replace uses PUT to fully replace a thing."""
-    route = respx.put("https://example.com/customer/123x456").mock(return_value=httpx.Response(204))
+    route = httpx2_mock.put("https://example.com/customer/123x456").respond(204)
 
     async with raw_client.RawClient() as client:
         response = await client.replace(
@@ -45,13 +46,12 @@ async def test_replace(configured_client: None) -> None:
     assert route.call_count == 1
 
 
-@respx.mock
-async def test_bulk_create(configured_client: None) -> None:
+async def test_bulk_create(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test that bulk_create posts newline-delimited JSON."""
     # bubble returns text/plain with one JSON object per line
     mock_response_text = '{"status":"success","id":"1234x5678"}\n{"status":"success","id":"1234x5679"}'
-    route = respx.post("https://example.com/customer/bulk").mock(
-        return_value=httpx.Response(200, text=mock_response_text, headers={"content-type": "text/plain"})
+    route = httpx2_mock.post("https://example.com/customer/bulk").respond(
+        200, text=mock_response_text, headers={"content-type": "text/plain"}
     )
 
     async with raw_client.RawClient() as client:
@@ -68,12 +68,11 @@ async def test_bulk_create(configured_client: None) -> None:
     assert request_content == '{"name": "Alice"}\n{"name": "Bob"}'
 
 
-@respx.mock
-async def test_bulk_create_parsed_success(configured_client: None) -> None:
+async def test_bulk_create_parsed_success(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test that bulk_create_parsed returns parsed results on success."""
     mock_response_text = '{"status":"success","id":"1234x5678"}\n{"status":"success","id":"1234x5679"}'
-    respx.post("https://example.com/customer/bulk").mock(
-        return_value=httpx.Response(200, text=mock_response_text, headers={"content-type": "text/plain"})
+    httpx2_mock.post("https://example.com/customer/bulk").respond(
+        200, text=mock_response_text, headers={"content-type": "text/plain"}
     )
 
     async with raw_client.RawClient() as client:
@@ -91,12 +90,11 @@ async def test_bulk_create_parsed_success(configured_client: None) -> None:
     assert results[1]["message"] is None
 
 
-@respx.mock
-async def test_bulk_create_parsed_partial_failure(configured_client: None) -> None:
+async def test_bulk_create_parsed_partial_failure(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test that bulk_create_parsed returns parsed results on partial failure."""
     mock_response_text = '{"status":"success","id":"1234x5678"}\n{"status":"error","message":"Invalid field value"}'
-    respx.post("https://example.com/customer/bulk").mock(
-        return_value=httpx.Response(200, text=mock_response_text, headers={"content-type": "text/plain"})
+    httpx2_mock.post("https://example.com/customer/bulk").respond(
+        200, text=mock_response_text, headers={"content-type": "text/plain"}
     )
 
     async with raw_client.RawClient() as client:
@@ -114,11 +112,10 @@ async def test_bulk_create_parsed_partial_failure(configured_client: None) -> No
     assert results[1]["message"] == "Invalid field value"
 
 
-@respx.mock
-async def test_find_with_parameters(configured_client: None) -> None:
+async def test_find_with_parameters(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test that find passes optional parameters correctly."""
-    route = respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/customer").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     async with raw_client.RawClient() as client:
@@ -140,11 +137,10 @@ async def test_find_with_parameters(configured_client: None) -> None:
     assert "exclude_remaining=true" in str(request.url)
 
 
-@respx.mock
-async def test_find_serializes_datetime_constraint_value(configured_client: None) -> None:
+async def test_find_serializes_datetime_constraint_value(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Verify tz-aware datetime constraint values become ISO 8601 strings (Z-suffixed for UTC)."""
-    route = respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/customer").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     modified_after = datetime(2025, 1, 15, 14, 30, 0, tzinfo=UTC)
@@ -158,11 +154,10 @@ async def test_find_serializes_datetime_constraint_value(configured_client: None
     assert "2025-01-15T14:30:00Z" in constraints_param
 
 
-@respx.mock
-async def test_find_serializes_date_constraint_value(configured_client: None) -> None:
+async def test_find_serializes_date_constraint_value(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Verify date constraint values become ISO 8601 strings in the URL."""
-    route = respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/customer").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     cutoff = date(2025, 1, 15)
@@ -176,11 +171,10 @@ async def test_find_serializes_date_constraint_value(configured_client: None) ->
     assert cutoff.isoformat() in constraints_param
 
 
-@respx.mock
-async def test_find_serializes_datetimes_in_in_constraint(configured_client: None) -> None:
+async def test_find_serializes_datetimes_in_in_constraint(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Verify datetime values nested inside an IN constraint list are converted."""
-    route = respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/customer").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     a = datetime(2025, 1, 1, tzinfo=UTC)
@@ -196,11 +190,10 @@ async def test_find_serializes_datetimes_in_in_constraint(configured_client: Non
     assert "2025-06-01T00:00:00Z" in constraints_param
 
 
-@respx.mock
-async def test_find_serializes_decimal_constraint_value(configured_client: None) -> None:
+async def test_find_serializes_decimal_constraint_value(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Verify Decimal constraint values become strings in the URL (matches pydantic body path)."""
-    route = respx.get("https://example.com/product").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/product").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     price = Decimal("9.99")
@@ -214,11 +207,10 @@ async def test_find_serializes_decimal_constraint_value(configured_client: None)
     assert '"9.99"' in constraints_param
 
 
-@respx.mock
-async def test_find_serializes_uuid_constraint_value(configured_client: None) -> None:
+async def test_find_serializes_uuid_constraint_value(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Verify UUID constraint values become canonical hex strings in the URL."""
-    route = respx.get("https://example.com/event").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/event").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     external_id = UUID("12345678-1234-5678-1234-567812345678")
@@ -232,8 +224,7 @@ async def test_find_serializes_uuid_constraint_value(configured_client: None) ->
     assert str(external_id) in constraints_param
 
 
-@respx.mock
-async def test_find_serializes_enum_constraint_value(configured_client: None) -> None:
+async def test_find_serializes_enum_constraint_value(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Verify plain Enum members serialize via their .value (IntEnum/StrEnum already serialize natively)."""
 
     class Status(Enum):
@@ -242,8 +233,8 @@ async def test_find_serializes_enum_constraint_value(configured_client: None) ->
     class Priority(IntEnum):
         HIGH = 1
 
-    route = respx.get("https://example.com/order").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/order").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     async with raw_client.RawClient() as client:
@@ -275,11 +266,10 @@ async def test_find_rejects_unsupported_constraint_value_type(configured_client:
             )
 
 
-@respx.mock
-async def test_find_with_additional_sort_fields(configured_client: None) -> None:
+async def test_find_with_additional_sort_fields(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test that find passes additional_sort_fields correctly."""
-    route = respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 0, "remaining": 0}})
+    route = httpx2_mock.get("https://example.com/customer").respond(
+        200, json={"response": {"results": [], "count": 0, "remaining": 0}}
     )
 
     async with raw_client.RawClient() as client:
@@ -293,11 +283,10 @@ async def test_find_with_additional_sort_fields(configured_client: None) -> None
     assert "additional_sort_fields" in str(request.url)
 
 
-@respx.mock
-async def test_count(configured_client: None) -> None:
+async def test_count(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test that count returns total from count + remaining."""
-    respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [], "count": 5, "remaining": 95}})
+    httpx2_mock.get("https://example.com/customer").respond(
+        200, json={"response": {"results": [], "count": 5, "remaining": 95}}
     )
 
     async with raw_client.RawClient() as client:
@@ -306,21 +295,18 @@ async def test_count(configured_client: None) -> None:
     assert total == 100
 
 
-@respx.mock
-async def test_find_page_single_page(configured_client: None) -> None:
+async def test_find_page_single_page(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test find_page returns a PageResult with items and envelope metadata."""
-    respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "response": {
-                    "cursor": 0,
-                    "results": [{"_id": "a1"}, {"_id": "a2"}, {"_id": "a3"}],
-                    "count": 3,
-                    "remaining": 0,
-                }
-            },
-        )
+    httpx2_mock.get("https://example.com/customer").respond(
+        200,
+        json={
+            "response": {
+                "cursor": 0,
+                "results": [{"_id": "a1"}, {"_id": "a2"}, {"_id": "a3"}],
+                "count": 3,
+                "remaining": 0,
+            }
+        },
     )
 
     async with raw_client.RawClient() as client:
@@ -333,21 +319,18 @@ async def test_find_page_single_page(configured_client: None) -> None:
     assert page.has_more is False
 
 
-@respx.mock
-async def test_find_page_middle_page_computes_total(configured_client: None) -> None:
+async def test_find_page_middle_page_computes_total(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test find_page total is cursor + len(items) + remaining."""
-    respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "response": {
-                    "cursor": 100,
-                    "results": [{"_id": f"a{i}"} for i in range(50)],
-                    "count": 50,
-                    "remaining": 400,
-                }
-            },
-        )
+    httpx2_mock.get("https://example.com/customer").respond(
+        200,
+        json={
+            "response": {
+                "cursor": 100,
+                "results": [{"_id": f"a{i}"} for i in range(50)],
+                "count": 50,
+                "remaining": 400,
+            }
+        },
     )
 
     async with raw_client.RawClient() as client:
@@ -360,21 +343,18 @@ async def test_find_page_middle_page_computes_total(configured_client: None) -> 
     assert page.has_more is True
 
 
-@respx.mock
-async def test_find_page_last_partial_page(configured_client: None) -> None:
+async def test_find_page_last_partial_page(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test find_page on a last partial page: has_more is False, total correct."""
-    respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "response": {
-                    "cursor": 97,
-                    "results": [{"_id": "a1"}, {"_id": "a2"}, {"_id": "a3"}],
-                    "count": 3,
-                    "remaining": 0,
-                }
-            },
-        )
+    httpx2_mock.get("https://example.com/customer").respond(
+        200,
+        json={
+            "response": {
+                "cursor": 97,
+                "results": [{"_id": "a1"}, {"_id": "a2"}, {"_id": "a3"}],
+                "count": 3,
+                "remaining": 0,
+            }
+        },
     )
 
     async with raw_client.RawClient() as client:
@@ -386,14 +366,11 @@ async def test_find_page_last_partial_page(configured_client: None) -> None:
     assert page.has_more is False
 
 
-@respx.mock
-async def test_find_page_empty_result(configured_client: None) -> None:
+async def test_find_page_empty_result(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test find_page with zero matches returns empty PageResult."""
-    respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(
-            200,
-            json={"response": {"cursor": 0, "results": [], "count": 0, "remaining": 0}},
-        )
+    httpx2_mock.get("https://example.com/customer").respond(
+        200,
+        json={"response": {"cursor": 0, "results": [], "count": 0, "remaining": 0}},
     )
 
     async with raw_client.RawClient() as client:
@@ -406,8 +383,7 @@ async def test_find_page_empty_result(configured_client: None) -> None:
     assert page.has_more is False
 
 
-@respx.mock
-async def test_find_page_reads_cursor_from_server_envelope(configured_client: None) -> None:
+async def test_find_page_reads_cursor_from_server_envelope(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Verify find_page uses the cursor reported by Bubble, not the echoed request.
 
     In practice Bubble echoes the requested cursor, but find_page is
@@ -416,18 +392,16 @@ async def test_find_page_reads_cursor_from_server_envelope(configured_client: No
     reflect that normalization, not hide it.
     """
     # server returns a cursor different from what we requested
-    respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "response": {
-                    "cursor": 7,  # server-normalized value (simulated)
-                    "results": [{"_id": "a1"}],
-                    "count": 1,
-                    "remaining": 0,
-                }
-            },
-        )
+    httpx2_mock.get("https://example.com/customer").respond(
+        200,
+        json={
+            "response": {
+                "cursor": 7,  # server-normalized value (simulated)
+                "results": [{"_id": "a1"}],
+                "count": 1,
+                "remaining": 0,
+            }
+        },
     )
 
     async with raw_client.RawClient() as client:
@@ -436,14 +410,11 @@ async def test_find_page_reads_cursor_from_server_envelope(configured_client: No
     assert page.cursor == 7  # server value, not the requested 42
 
 
-@respx.mock
-async def test_find_page_forwards_params(configured_client: None) -> None:
+async def test_find_page_forwards_params(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test find_page forwards cursor, limit, sort, and constraints; never sends exclude_remaining."""
-    route = respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(
-            200,
-            json={"response": {"cursor": 50, "results": [], "count": 0, "remaining": 0}},
-        )
+    route = httpx2_mock.get("https://example.com/customer").respond(
+        200,
+        json={"response": {"cursor": 50, "results": [], "count": 0, "remaining": 0}},
     )
 
     async with raw_client.RawClient() as client:
@@ -467,12 +438,9 @@ async def test_find_page_forwards_params(configured_client: None) -> None:
     assert "exclude_remaining" not in request_url
 
 
-@respx.mock
-async def test_exists_by_uid_found(configured_client: None) -> None:
+async def test_exists_by_uid_found(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test exists returns True when record found by uid."""
-    respx.get("https://example.com/customer/123x456").mock(
-        return_value=httpx.Response(200, json={"response": {"_id": "123x456"}})
-    )
+    httpx2_mock.get("https://example.com/customer/123x456").respond(200, json={"response": {"_id": "123x456"}})
 
     async with raw_client.RawClient() as client:
         result = await client.exists(typename="customer", uid="123x456")
@@ -480,12 +448,9 @@ async def test_exists_by_uid_found(configured_client: None) -> None:
     assert result is True
 
 
-@respx.mock
-async def test_exists_by_uid_not_found(configured_client: None) -> None:
+async def test_exists_by_uid_not_found(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test exists returns False when record not found by uid."""
-    respx.get("https://example.com/customer/123x456").mock(
-        return_value=httpx.Response(404, json={"status": "NOT_FOUND"})
-    )
+    httpx2_mock.get("https://example.com/customer/123x456").respond(404, json={"status": "NOT_FOUND"})
 
     async with raw_client.RawClient() as client:
         result = await client.exists(typename="customer", uid="123x456")
@@ -493,12 +458,9 @@ async def test_exists_by_uid_not_found(configured_client: None) -> None:
     assert result is False
 
 
-@respx.mock
-async def test_exists_by_uid_error_reraises(configured_client: None) -> None:
+async def test_exists_by_uid_error_reraises(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test exists re-raises non-404 HTTP errors."""
-    respx.get("https://example.com/customer/123x456").mock(
-        return_value=httpx.Response(500, json={"error": "server error"})
-    )
+    httpx2_mock.get("https://example.com/customer/123x456").respond(500, json={"error": "server error"})
 
     async with raw_client.RawClient() as client:
         with pytest.raises(BubbleAPIError) as exc_info:
@@ -507,11 +469,10 @@ async def test_exists_by_uid_error_reraises(configured_client: None) -> None:
     assert exc_info.value.status_code == 500
 
 
-@respx.mock
-async def test_exists_by_constraints(configured_client: None) -> None:
+async def test_exists_by_constraints(configured_client: None, httpx2_mock: respx.Router) -> None:
     """Test exists with constraints uses find."""
-    respx.get("https://example.com/customer").mock(
-        return_value=httpx.Response(200, json={"response": {"results": [{"_id": "1x1"}], "count": 1, "remaining": 0}})
+    httpx2_mock.get("https://example.com/customer").respond(
+        200, json={"response": {"results": [{"_id": "1x1"}], "count": 1, "remaining": 0}}
     )
 
     async with raw_client.RawClient() as client:

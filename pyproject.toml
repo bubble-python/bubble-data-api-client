@@ -24,7 +24,7 @@ keywords = [
     "database",
     "integration",
     "etl",
-    "httpx",
+    "httpx2",
     "low-code",
     "nocode",
 ]
@@ -48,7 +48,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "httpx[http2]~=0.28",
+    "httpx2[http2]~=2.3",
     "pydantic~=2.12",
     "tenacity~=9.1",
     "typing_extensions>=4.10",
@@ -63,6 +63,7 @@ dev = [
     "coverage~=7.10",
     "pytest~=9.0",
     "pytest-asyncio~=1.1",
+    "pytest-httpx2~=1.0",
     "ruff~=0.12",
     "respx~=0.22",
     "python-dotenv~=1.2.1",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 import pytest
 
 if TYPE_CHECKING:
@@ -68,5 +68,5 @@ def test_get_client_outside_async_context() -> None:
 
     # called from sync context - no running event loop
     client = get_client()
-    assert isinstance(client, httpx.AsyncClient)
+    assert isinstance(client, httpx2.AsyncClient)
     assert not client.is_closed

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-import httpx
+import httpx2
 
 from bubble_data_api_client.config import BubbleConfig, get_config
 from bubble_data_api_client.exceptions import ConfigurationError
@@ -20,7 +20,7 @@ from bubble_data_api_client.http_client import httpx_client_factory
 
 # type aliases
 _ConfigKey = tuple[str, str]
-_LoopClientMap = weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient]
+_LoopClientMap = weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx2.AsyncClient]
 
 # global client pool: config_key → { loop → client }
 # WeakKeyDictionary auto-removes entries when the loop is garbage collected
@@ -33,8 +33,8 @@ def _make_client_key(config: BubbleConfig) -> _ConfigKey:
     return (config["data_api_root_url"], config["api_key"])
 
 
-def _create_client_from_config(config: BubbleConfig) -> httpx.AsyncClient:
-    """Create a new httpx client from config."""
+def _create_client_from_config(config: BubbleConfig) -> httpx2.AsyncClient:
+    """Create a new httpx2 client from config."""
     base_url = config["data_api_root_url"]
     if not base_url:
         raise ConfigurationError("data_api_root_url")
@@ -44,7 +44,7 @@ def _create_client_from_config(config: BubbleConfig) -> httpx.AsyncClient:
     return httpx_client_factory(base_url=base_url, api_key=api_key)
 
 
-def get_client() -> httpx.AsyncClient:
+def get_client() -> httpx2.AsyncClient:
     """Get or create a client for the current config and event loop. Thread-safe.
 
     Each (config, event_loop) pair gets its own client. When an event loop is
@@ -89,7 +89,7 @@ async def close_clients() -> None:
     current_loop = asyncio.get_running_loop()
 
     with _lock:
-        clients_to_close: list[httpx.AsyncClient] = [
+        clients_to_close: list[httpx2.AsyncClient] = [
             loop_clients.pop(current_loop) for loop_clients in _clients.values() if current_loop in loop_clients
         ]
 
@@ -114,7 +114,7 @@ def _atexit_cleanup() -> None:
     """Best-effort cleanup of all clients at interpreter exit."""
     with _lock:
         # collect all clients from all config/loop combinations
-        clients_to_close: list[httpx.AsyncClient] = []
+        clients_to_close: list[httpx2.AsyncClient] = []
         for loop_clients in _clients.values():
             clients_to_close.extend(loop_clients.values())
         _clients.clear()

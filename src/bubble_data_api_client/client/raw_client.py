@@ -25,7 +25,7 @@ from pydantic import TypeAdapter
 if TYPE_CHECKING:
     import types
 
-    import httpx
+    import httpx2
 
 from bubble_data_api_client.constraints import (
     AdditionalSortField,
@@ -66,7 +66,7 @@ class RawClient:
     This client serves two purposes:
 
     Raw API methods are direct 1:1 mappings to Bubble Data API endpoints. These
-    return httpx.Response to give full access to status codes, headers, and
+    return httpx2.Response to give full access to status codes, headers, and
     response bodies. The caller is responsible for parsing responses.
 
         retrieve, create, bulk_create, delete, update, replace, find
@@ -104,16 +104,16 @@ class RawClient:
         """Exit async context and close the HTTP transport."""
         await self._transport.__aexit__(exc_type, exc_val, exc_tb)
 
-    async def retrieve(self, typename: str, uid: str) -> httpx.Response:
+    async def retrieve(self, typename: str, uid: str) -> httpx2.Response:
         """Fetch a single thing by its unique ID."""
         return await self._transport.get(f"/{typename}/{uid}")
 
-    async def create(self, typename: str, data: typing.Any) -> httpx.Response:
+    async def create(self, typename: str, data: typing.Any) -> httpx2.Response:
         """Create a new thing with the given data."""
         return await self._transport.post(url=f"/{typename}", json=data)
 
     # https://manual.bubble.io/core-resources/api/the-bubble-api/the-data-api/data-api-requests#bulk-create-things
-    async def bulk_create(self, typename: str, data: list[typing.Any]) -> httpx.Response:
+    async def bulk_create(self, typename: str, data: list[typing.Any]) -> httpx2.Response:
         """Create multiple things in a single request using newline-delimited JSON.
 
         Response is text/plain with one JSON object per line, in the same order as input:
@@ -146,15 +146,15 @@ class RawClient:
             )
         return results
 
-    async def delete(self, typename: str, uid: str) -> httpx.Response:
+    async def delete(self, typename: str, uid: str) -> httpx2.Response:
         """Delete a thing by its unique ID."""
         return await self._transport.delete(f"/{typename}/{uid}")
 
-    async def update(self, typename: str, uid: str, data: typing.Any) -> httpx.Response:
+    async def update(self, typename: str, uid: str, data: typing.Any) -> httpx2.Response:
         """Partially update a thing with PATCH, only modifying specified fields."""
         return await self._transport.patch(f"/{typename}/{uid}", json=data)
 
-    async def replace(self, typename: str, uid: str, data: typing.Any) -> httpx.Response:
+    async def replace(self, typename: str, uid: str, data: typing.Any) -> httpx2.Response:
         """Fully replace a thing's data with PUT, clearing unspecified fields."""
         return await self._transport.put(f"/{typename}/{uid}", json=data)
 
@@ -170,7 +170,7 @@ class RawClient:
         descending: bool | None = None,
         exclude_remaining: bool | None = None,
         additional_sort_fields: list[AdditionalSortField] | None = None,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Search for things matching constraints with pagination and sorting."""
         params: dict[str, str] = {}
 

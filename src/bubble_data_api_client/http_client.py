@@ -1,6 +1,6 @@
 """HTTP client factory for Bubble Data API."""
 
-import httpx
+import httpx2
 
 DEFAULT_USER_AGENT = "bubble-data-api-client"
 DEFAULT_TIMEOUT_SECONDS = 20.0
@@ -14,15 +14,15 @@ def httpx_client_factory(
     user_agent: str = DEFAULT_USER_AGENT,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     retries: int = DEFAULT_RETRY_COUNT,
-) -> httpx.AsyncClient:
+) -> httpx2.AsyncClient:
     """Create a configured async HTTP client for the Bubble Data API."""
-    return httpx.AsyncClient(
+    return httpx2.AsyncClient(
         base_url=base_url,
         headers={
             "Authorization": f"Bearer {api_key}",
             "User-Agent": user_agent,
         },
         http2=True,
-        transport=httpx.AsyncHTTPTransport(retries=retries),
-        timeout=httpx.Timeout(timeout),
+        transport=httpx2.AsyncHTTPTransport(retries=retries),
+        timeout=httpx2.Timeout(timeout),
     )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 
 if TYPE_CHECKING:
     import types
@@ -19,7 +19,7 @@ class Transport:
     """Async context manager for HTTP operations.
 
     Responsibilities:
-    - Obtains a pooled httpx client on entry
+    - Obtains a pooled httpx2 client on entry
     - Provides HTTP verb methods (get, post, patch, put, delete)
     - Raises BubbleAPIError on non-2xx responses (single point of HTTP error handling)
 
@@ -31,7 +31,7 @@ class Transport:
     the http_client module. Connection pooling is handled by the pool module.
     """
 
-    _http: httpx.AsyncClient
+    _http: httpx2.AsyncClient
 
     def __init__(self) -> None:
         """Initialize the transport (must be used as async context manager)."""
@@ -58,7 +58,7 @@ class Transport:
         json: typing.Any = None,
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Execute an HTTP request with optional retry logic.
 
         This is the single point of HTTP error handling for the library.
@@ -68,8 +68,8 @@ class Transport:
             BubbleAPIError: On any non-2xx HTTP response.
         """
 
-        async def do_request() -> httpx.Response:
-            response: httpx.Response = await self._http.request(
+        async def do_request() -> httpx2.Response:
+            response: httpx2.Response = await self._http.request(
                 method=method,
                 url=url,
                 content=content,
@@ -79,7 +79,7 @@ class Transport:
             )
             try:
                 response.raise_for_status()
-            except httpx.HTTPStatusError as e:
+            except httpx2.HTTPStatusError as e:
                 raise BubbleAPIError.from_response(response) from e
             return response
 
@@ -93,27 +93,27 @@ class Transport:
         url: str,
         *,
         params: dict[str, str] | None = None,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Execute a GET request."""
         return await self.request(method="GET", url=url, params=params)
 
-    async def patch(self, url: str, json: typing.Any) -> httpx.Response:
+    async def patch(self, url: str, json: typing.Any) -> httpx2.Response:
         """Execute a PATCH request with JSON body."""
         return await self.request(method="PATCH", url=url, json=json)
 
-    async def put(self, url: str, json: typing.Any) -> httpx.Response:
+    async def put(self, url: str, json: typing.Any) -> httpx2.Response:
         """Execute a PUT request with JSON body."""
         return await self.request(method="PUT", url=url, json=json)
 
-    async def delete(self, url: str) -> httpx.Response:
+    async def delete(self, url: str) -> httpx2.Response:
         """Execute a DELETE request."""
         return await self.request(method="DELETE", url=url)
 
-    async def post(self, url: str, json: typing.Any) -> httpx.Response:
+    async def post(self, url: str, json: typing.Any) -> httpx2.Response:
         """Execute a POST request with JSON body."""
         return await self.request(method="POST", url=url, json=json)
 
-    async def post_text(self, url: str, content: str) -> httpx.Response:
+    async def post_text(self, url: str, content: str) -> httpx2.Response:
         """Execute a POST request with plain text body."""
         return await self.request(
             method="POST",

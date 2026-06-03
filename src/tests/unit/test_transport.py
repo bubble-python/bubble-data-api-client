@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import httpx
+import httpx2
 import pytest
-import respx
 import tenacity
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+
+    import respx
 
 from bubble_data_api_client import BubbleAPIError, configure, http_client
 from bubble_data_api_client.pool import close_clients
@@ -29,14 +31,13 @@ def test_httpx_client_factory(test_url: str, test_api_key: str) -> None:
         base_url=test_url,
         api_key=test_api_key,
     )
-    assert isinstance(client, httpx.AsyncClient)
+    assert isinstance(client, httpx2.AsyncClient)
     assert client.base_url == test_url
     assert client.headers["Authorization"] == f"Bearer {test_api_key}"
     assert client.headers["User-Agent"] == http_client.DEFAULT_USER_AGENT
 
 
-@respx.mock
-async def test_transport_no_retry_fails_immediately(clean_client_pool: None) -> None:
+async def test_transport_no_retry_fails_immediately(clean_client_pool: None, httpx2_mock: respx.Router) -> None:
     """Test that request fails immediately when no retry is configured."""
     configure(
         data_api_root_url="https://test.example.com",
@@ -44,7 +45,7 @@ async def test_transport_no_retry_fails_immediately(clean_client_pool: None) -> 
         retry=None,
     )
 
-    route = respx.get("https://test.example.com/test").mock(return_value=httpx.Response(500))
+    route = httpx2_mock.get("https://test.example.com/test").respond(500)
 
     async with Transport() as transport:
         with pytest.raises(BubbleAPIError) as exc_info:
@@ -54,8 +55,7 @@ async def test_transport_no_retry_fails_immediately(clean_client_pool: None) -> 
     assert route.call_count == 1
 
 
-@respx.mock
-async def test_transport_retry_succeeds_after_failures(clean_client_pool: None) -> None:
+async def test_transport_retry_succeeds_after_failures(clean_client_pool: None, httpx2_mock: respx.Router) -> None:
     """Test that request retries and succeeds after transient failures."""
     configure(
         data_api_root_url="https://test.example.com",
@@ -67,7 +67,7 @@ async def test_transport_retry_succeeds_after_failures(clean_client_pool: None) 
         ),
     )
 
-    route = respx.get("https://test.example.com/test").mock(
+    route = httpx2_mock.get("https://test.example.com/test").mock(
         side_effect=[
             httpx.Response(500),
             httpx.Response(500),
@@ -82,8 +82,7 @@ async def test_transport_retry_succeeds_after_failures(clean_client_pool: None) 
     assert route.call_count == 3
 
 
-@respx.mock
-async def test_transport_retry_exhausted(clean_client_pool: None) -> None:
+async def test_transport_retry_exhausted(clean_client_pool: None, httpx2_mock: respx.Router) -> None:
     """Test that RetryError is raised when all retry attempts fail."""
     configure(
         data_api_root_url="https://test.example.com",
@@ -95,7 +94,7 @@ async def test_transport_retry_exhausted(clean_client_pool: None) -> None:
         ),
     )
 
-    route = respx.get("https://test.example.com/test").mock(return_value=httpx.Response(500))
+    route = httpx2_mock.get("https://test.example.com/test").respond(500)
 
     async with Transport() as transport:
         with pytest.raises(tenacity.RetryError):

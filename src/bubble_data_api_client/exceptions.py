@@ -6,7 +6,7 @@ import typing
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
 
 
 class BubbleError(Exception):
@@ -32,7 +32,7 @@ class BubbleAPIError(BubbleHttpError):
         status_code: HTTP status code (400, 404, 500, etc.)
         status: Bubble error status string ("MISSING_DATA", etc.) or None if unparseable
         message: Human-readable error message from Bubble or raw response text
-        response: Original httpx.Response for advanced inspection
+        response: Original httpx2.Response for advanced inspection
     """
 
     def __init__(
@@ -40,7 +40,7 @@ class BubbleAPIError(BubbleHttpError):
         status_code: int,
         status: str | None,
         message: str,
-        response: httpx.Response,
+        response: httpx2.Response,
     ) -> None:
         """Create error with parsed Bubble API response data."""
         self.status_code = status_code
@@ -50,7 +50,7 @@ class BubbleAPIError(BubbleHttpError):
         super().__init__(message)
 
     @classmethod
-    def from_response(cls, response: httpx.Response) -> typing.Self:
+    def from_response(cls, response: httpx2.Response) -> typing.Self:
         """Parse Bubble error response and construct exception."""
         status: str | None = None
         message: str = response.text
