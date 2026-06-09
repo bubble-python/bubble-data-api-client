@@ -40,6 +40,7 @@ from bubble_data_api_client.constraints import (
     constraint,
 )
 from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
+from bubble_data_api_client.pagination import _DEFAULT_KEYSET_WINDOW
 from bubble_data_api_client.types import BUILTIN_FIELDS, BubbleField, OnMultiple, PageResult
 
 # max UIDs per "in" constraint batch, matching the API's max page size.
@@ -365,6 +366,46 @@ class BubbleModel(PydanticBaseModel):
                 additional_sort_fields=additional_sort_fields,
             )
         ]
+
+    @classmethod
+    async def scan(
+        cls,
+        *,
+        constraints: list[Constraint] | None = None,
+        keyset_field: str = BubbleField.CREATED_DATE,
+        page_size: int = _DEFAULT_PAGE_SIZE,
+        window: int = _DEFAULT_KEYSET_WINDOW,
+    ) -> AsyncIterator[typing.Self]:
+        """Stream every matching record, ordered by keyset_field ascending.
+
+        Use scan() instead of find_iter()/find_all() for collections larger
+        than Bubble's ~50,000 cursor cap. It uses keyset pagination, so it
+        streams records of any size with constant memory, where the offset
+        pagination behind find_iter() silently stops at the cap.
+
+        The trade-off is fixed ordering: records arrive in ascending
+        keyset_field order (Created Date by default) and an arbitrary sort
+        cannot be combined with cap-free iteration. See
+        bubble_data_api_client.pagination for the algorithm and its limits.
+
+        Args:
+            constraints: Filter conditions (use constraint() helper to build).
+            keyset_field: Monotonic date field to page by. Defaults to Created Date.
+            page_size: Records requested per page (Bubble caps this at 100).
+            window: Cursor offset at which to seek forward. Below the ~50k cap.
+
+        Yields:
+            Model instances in ascending keyset_field order.
+        """
+        async with _get_client() as client:
+            async for row in client.scan(
+                cls._typename,
+                constraints=constraints,
+                keyset_field=keyset_field,
+                page_size=page_size,
+                window=window,
+            ):
+                yield cls.model_validate(row)
 
     @classmethod
     async def count(cls, *, constraints: list[Constraint] | None = None) -> int:

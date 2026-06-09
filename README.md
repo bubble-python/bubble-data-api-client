@@ -125,6 +125,7 @@ HTTP connections are pooled per event loop, avoiding reconnection overhead when 
 - **Connection pooling:** automatic per-event-loop client reuse
 - **Rich query constraints:** pythonic filtering using Bubble's constraint system
 - **Efficient iteration:** `find_iter()` streams records with constant memory
+- **Unlimited scanning:** `scan()` streams collections of any size, past Bubble's ~50,000 record limit
 - **Upsert with duplicate handling:** `create_or_update` with configurable strategies
 - **Configurable retries:** plug in your own retry policy via `tenacity`
 - **UID validation:** catch invalid Bubble IDs at the model level
@@ -306,6 +307,7 @@ Three methods for fetching records, depending on your needs:
 | `find()` | `list` | Single page with manual pagination via `cursor`/`limit` |
 | `find_all()` | `list` | All matching records collected into memory |
 | `find_iter()` | `AsyncIterator` | All matching records with constant memory |
+| `scan()` | `AsyncIterator` | Stream collections of any size, past Bubble's ~50,000 record limit |
 
 ```python
 # find(): single page, you control pagination
@@ -319,9 +321,36 @@ print(f"Got {len(all_users)} users")
 # find_iter(): streams records with constant memory
 async for user in User.find_iter(constraints=[...]):
     await process(user)  # each record processed as it arrives
+
+# scan(): streams records of any size, past the ~50k offset cap
+async for user in User.scan(constraints=[...]):
+    await process(user)
 ```
 
-Both `find_all()` and `find_iter()` handle pagination internally, fetching pages of `page_size` (default 100) until all records are retrieved.
+Both `find_all()` and `find_iter()` handle pagination internally, fetching pages of `page_size` (default 100) until all records are retrieved. For very large collections, past Bubble's ~50,000 record pagination limit, use `scan()` (see [Scanning Large Collections](#scanning-large-collections)).
+
+## Scanning Large Collections
+
+Bubble stops paginating once you reach roughly 50,000 records, so `find_all()` and `find_iter()` can't walk a bigger collection in full. `scan()` removes that ceiling: it streams every record, no matter how large the collection, with constant memory.
+
+```python
+# stream every record, however many there are
+async for user in User.scan():
+    await process(user)
+
+# filter with the same constraints as find()
+async for user in User.scan(constraints=[
+    constraint("status", ConstraintType.EQUALS, "active"),
+]):
+    await process(user)
+
+# also available on the raw client, yielding plain dicts
+async with RawClient() as client:
+    async for row in client.scan("user"):
+        process(row)
+```
+
+Records arrive in Created Date order, the one trade-off for unlimited iteration. Pass `keyset_field=...` to order by a different date field. For collections that fit under the cap, `find_iter()` stays the simpler choice and supports any sort order.
 
 ## Type-Safe Bubble UIDs
 
@@ -455,6 +484,10 @@ Use `find()` (or `find_all()` / `find_iter()`) with a list of `constraint(...)` 
 ### How do I handle Bubble Data API pagination?
 
 The library handles pagination for you. Use `find_all()` to collect every matching record into a list, or `find_iter()` to stream records with constant memory. Both walk all pages internally. Use `find()` only if you want manual `cursor` / `limit` control. See [Querying Records](#querying-records).
+
+### How do I paginate past Bubble's 50,000 record limit?
+
+Use `scan()`. It streams every record in a collection of any size, where `find_all()` and `find_iter()` stop at Bubble's ~50,000 record limit. Records come back in Created Date order. See [Scanning Large Collections](#scanning-large-collections).
 
 ### Does this support upserts?
 

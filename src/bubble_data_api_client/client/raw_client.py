@@ -24,6 +24,7 @@ from pydantic import TypeAdapter
 
 if TYPE_CHECKING:
     import types
+    from collections.abc import AsyncIterator
 
     import httpx2
 
@@ -39,6 +40,7 @@ from bubble_data_api_client.exceptions import (
     MultipleMatchesError,
     PartialFailureError,
 )
+from bubble_data_api_client.pagination import _DEFAULT_KEYSET_WINDOW, keyset_scan
 from bubble_data_api_client.transport import Transport
 from bubble_data_api_client.types import (
     BubbleField,
@@ -257,6 +259,62 @@ class RawClient:
             cursor=body["cursor"],
             remaining=body["remaining"],
         )
+
+    async def scan(
+        self,
+        typename: str,
+        *,
+        constraints: list[Constraint] | None = None,
+        keyset_field: str = BubbleField.CREATED_DATE,
+        page_size: int = _DEFAULT_PAGE_SIZE,
+        window: int = _DEFAULT_KEYSET_WINDOW,
+    ) -> AsyncIterator[dict[str, typing.Any]]:
+        """Stream every matching row via keyset pagination, ordered by keyset_field.
+
+        Unlike the offset pagination behind find()/find_page, scan() is not
+        bounded by Bubble's ~50,000 cursor cap, so it streams collections of any
+        size with constant memory. Rows come back in ascending keyset_field
+        order: an arbitrary sort cannot be combined with cap-free iteration.
+
+        See bubble_data_api_client.pagination for the algorithm and its limits.
+
+        Args:
+            typename: The Bubble data type to scan.
+            constraints: Filter conditions (use constraint() helper to build).
+            keyset_field: Monotonic date field to page by. Defaults to Created Date.
+            page_size: Rows requested per page (Bubble caps this at 100).
+            window: Cursor offset at which to seek forward. Below the ~50k cap.
+
+        Yields:
+            Raw row dicts in ascending keyset_field order.
+        """
+
+        async def fetch(
+            *,
+            constraints: list[Constraint] | None,
+            cursor: int,
+            limit: int,
+            sort_field: str,
+            additional_sort_fields: list[AdditionalSortField],
+        ) -> PageResult[dict[str, typing.Any]]:
+            return await self.find_page(
+                typename,
+                constraints=constraints,
+                cursor=cursor,
+                limit=limit,
+                sort_field=sort_field,
+                descending=False,
+                additional_sort_fields=additional_sort_fields,
+            )
+
+        async for row in keyset_scan(
+            fetch,
+            keyset_field=keyset_field,
+            page_size=page_size,
+            constraints=constraints,
+            window=window,
+        ):
+            yield row
 
     async def count(
         self,
