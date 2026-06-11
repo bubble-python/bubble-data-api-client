@@ -83,6 +83,19 @@ async def test_raw_scan_forwards_base_constraints(configured_client: None, httpx
     assert scanned == ["id0", "id2", "id4"]
 
 
+async def test_raw_scan_concurrency_yields_same_rows(configured_client: None, httpx2_mock: respx.Router) -> None:
+    """concurrency > 1 streams the same rows in the same order as sequential."""
+    rows = [{"_id": f"id{i:02d}", "Created Date": _ts(i + 1), "name": f"n{i}"} for i in range(12)]
+    route = httpx2_mock.get("https://example.com/widget")
+    route.side_effect = _bubble_handler(rows)
+
+    async with RawClient() as client:
+        scanned = [r["_id"] async for r in client.scan("widget", page_size=2, window=4, concurrency=3)]
+
+    assert scanned == [f"id{i:02d}" for i in range(12)]
+    assert len(scanned) == len(set(scanned))
+
+
 async def test_orm_scan_returns_typed_models_through_seek(configured_client: None, httpx2_mock: respx.Router) -> None:
     """BubbleModel.scan yields validated instances across a seek, in Created Date order."""
 
@@ -93,7 +106,7 @@ async def test_orm_scan_returns_typed_models_through_seek(configured_client: Non
     route = httpx2_mock.get("https://example.com/widget")
     route.side_effect = _bubble_handler(rows)
 
-    widgets = [w async for w in Widget.scan(page_size=2, window=2)]
+    widgets = [w async for w in Widget.scan(page_size=2, window=2, concurrency=2)]
 
     assert all(isinstance(w, Widget) for w in widgets)
     assert [w.uid for w in widgets] == [f"id{i}" for i in range(5)]

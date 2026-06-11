@@ -40,7 +40,11 @@ from bubble_data_api_client.exceptions import (
     MultipleMatchesError,
     PartialFailureError,
 )
-from bubble_data_api_client.pagination import _DEFAULT_KEYSET_WINDOW, keyset_scan
+from bubble_data_api_client.pagination import (
+    _DEFAULT_KEYSET_WINDOW,
+    _DEFAULT_SCAN_CONCURRENCY,
+    keyset_scan,
+)
 from bubble_data_api_client.transport import Transport
 from bubble_data_api_client.types import (
     BubbleField,
@@ -54,7 +58,7 @@ from bubble_data_api_client.types import (
 # requested limit at 100 (no HTTP error, no warning). Verified empirically up
 # to limit=2,147,483,647 (int32 max).
 # https://manual.bubble.io/help-guides/integrations/api/the-bubble-api/the-data-api/data-api-requests
-_DEFAULT_PAGE_SIZE: int = 100
+_DEFAULT_PAGE_SIZE: typing.Final[int] = 100
 
 
 # reuse pydantic's mode=json conversions so query parameters serialize the
@@ -268,6 +272,7 @@ class RawClient:
         keyset_field: str = BubbleField.CREATED_DATE,
         page_size: int = _DEFAULT_PAGE_SIZE,
         window: int = _DEFAULT_KEYSET_WINDOW,
+        concurrency: int = _DEFAULT_SCAN_CONCURRENCY,
     ) -> AsyncIterator[dict[str, typing.Any]]:
         """Stream every matching row via keyset pagination, ordered by keyset_field.
 
@@ -284,6 +289,10 @@ class RawClient:
             keyset_field: Monotonic date field to page by. Defaults to Created Date.
             page_size: Rows requested per page (Bubble caps this at 100).
             window: Cursor offset at which to seek forward. Below the ~50k cap.
+            concurrency: Maximum pages fetched in parallel. 1 (the default)
+                fetches strictly sequentially. Higher values multiply both
+                throughput and request rate against Bubble; ordering and
+                no-duplicate guarantees are unchanged.
 
         Yields:
             Raw row dicts in ascending keyset_field order.
@@ -313,6 +322,7 @@ class RawClient:
             page_size=page_size,
             constraints=constraints,
             window=window,
+            concurrency=concurrency,
         ):
             yield row
 

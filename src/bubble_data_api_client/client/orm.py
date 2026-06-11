@@ -40,7 +40,7 @@ from bubble_data_api_client.constraints import (
     constraint,
 )
 from bubble_data_api_client.exceptions import BubbleAPIError, UnknownFieldError
-from bubble_data_api_client.pagination import _DEFAULT_KEYSET_WINDOW
+from bubble_data_api_client.pagination import _DEFAULT_KEYSET_WINDOW, _DEFAULT_SCAN_CONCURRENCY
 from bubble_data_api_client.types import BUILTIN_FIELDS, BubbleField, OnMultiple, PageResult
 
 # max UIDs per "in" constraint batch, matching the API's max page size.
@@ -375,6 +375,7 @@ class BubbleModel(PydanticBaseModel):
         keyset_field: str = BubbleField.CREATED_DATE,
         page_size: int = _DEFAULT_PAGE_SIZE,
         window: int = _DEFAULT_KEYSET_WINDOW,
+        concurrency: int = _DEFAULT_SCAN_CONCURRENCY,
     ) -> AsyncIterator[typing.Self]:
         """Stream every matching record, ordered by keyset_field ascending.
 
@@ -393,6 +394,10 @@ class BubbleModel(PydanticBaseModel):
             keyset_field: Monotonic date field to page by. Defaults to Created Date.
             page_size: Records requested per page (Bubble caps this at 100).
             window: Cursor offset at which to seek forward. Below the ~50k cap.
+            concurrency: Maximum pages fetched in parallel. 1 (the default)
+                fetches strictly sequentially. Higher values multiply both
+                throughput and request rate against Bubble; ordering and
+                no-duplicate guarantees are unchanged.
 
         Yields:
             Model instances in ascending keyset_field order.
@@ -404,6 +409,7 @@ class BubbleModel(PydanticBaseModel):
                 keyset_field=keyset_field,
                 page_size=page_size,
                 window=window,
+                concurrency=concurrency,
             ):
                 yield cls.model_validate(row)
 

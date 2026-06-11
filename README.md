@@ -344,6 +344,10 @@ async for user in User.scan(constraints=[
 ]):
     await process(user)
 
+# fetch pages in parallel for higher throughput (default is 1, sequential)
+async for user in User.scan(concurrency=10):
+    await process(user)
+
 # also available on the raw client, yielding plain dicts
 async with RawClient() as client:
     async for row in client.scan("user"):
@@ -351,6 +355,8 @@ async with RawClient() as client:
 ```
 
 Records arrive in Created Date order, the one trade-off for unlimited iteration. Pass `keyset_field=...` to order by a different date field. For collections that fit under the cap, `find_iter()` stays the simpler choice and supports any sort order.
+
+Sequential scanning is bound by Bubble's per-page latency (often around one second per 100 records). `concurrency=N` fetches up to N pages in parallel while preserving ordering and the no-duplicate guarantee; throughput scales near-linearly with N. It also multiplies your request rate against Bubble, so pick a value your plan's API limits allow.
 
 ## Type-Safe Bubble UIDs
 

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import typing
 from datetime import datetime
+
+import pytest
 
 from bubble_data_api_client.constraints import AdditionalSortField, Constraint, ConstraintType, constraint
 from bubble_data_api_client.pagination import keyset_scan
@@ -177,3 +180,135 @@ async def test_stops_on_empty_page_past_offset_cap() -> None:
     ids = [r["_id"] async for r in keyset_scan(fetch, keyset_field=_FIELD, page_size=1, window=1000)]
 
     assert ids == ["id000"]
+
+
+# --- concurrency ---
+
+
+def _ts_minutes(idx: int) -> str:
+    """Build a naive ISO timestamp distinct for indexes beyond one minute."""
+    return f"2024-01-01T00:{idx // 60:02d}:{idx % 60:02d}"
+
+
+class InFlightProbe(FakeBubble):
+    """FakeBubble that records how many fetches were ever in flight at once."""
+
+    def __init__(self, rows: list[dict[str, typing.Any]]) -> None:
+        super().__init__(rows)
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def fetch(self, **kwargs: typing.Any) -> PageResult[dict[str, typing.Any]]:
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        # yield to the event loop so concurrently dispatched fetches overlap
+        await asyncio.sleep(0)
+        try:
+            return await super().fetch(**kwargs)
+        finally:
+            self.in_flight -= 1
+
+
+@pytest.mark.parametrize("concurrency", [2, 3, 7])
+async def test_concurrency_yields_same_rows_through_seeks(concurrency: int) -> None:
+    """Concurrent batches must reproduce the sequential output exactly: same
+    rows, same order, no duplicates, across seeks and a dense bucket."""
+    data = (
+        [_row(i, _ts(1)) for i in range(5)]  # dense bucket wider than the window
+        + [_row(i, _ts(i - 3)) for i in range(5, 20)]  # distinct dates forcing seeks
+    )
+    expected = [r["_id"] async for r in keyset_scan(FakeBubble(data).fetch, keyset_field=_FIELD, page_size=2, window=4)]
+    fake = FakeBubble(data)
+
+    ids = [
+        r["_id"]
+        async for r in keyset_scan(fake.fetch, keyset_field=_FIELD, page_size=2, window=4, concurrency=concurrency)
+    ]
+
+    assert ids == expected == [f"id{i:03d}" for i in range(20)]
+    assert _seek_happened(fake)
+
+
+async def test_concurrency_fetches_pages_in_parallel() -> None:
+    """Batches after the probe page actually overlap their fetches."""
+    data = [_row(i, _ts_minutes(i)) for i in range(30)]
+    fake = InFlightProbe(data)
+
+    ids = [
+        r["_id"] async for r in keyset_scan(fake.fetch, keyset_field=_FIELD, page_size=2, window=1000, concurrency=4)
+    ]
+
+    assert ids == [f"id{i:03d}" for i in range(30)]
+    assert fake.max_in_flight == 4
+
+
+async def test_concurrency_sizes_batches_by_remaining() -> None:
+    """The probe page's remaining caps fan-out, so no fetch targets offsets
+    known to be empty: 5 rows at page_size 2 need exactly 3 fetches."""
+    data = [_row(i, _ts(i + 1)) for i in range(5)]
+    fake = FakeBubble(data)
+
+    ids = [
+        r["_id"] async for r in keyset_scan(fake.fetch, keyset_field=_FIELD, page_size=2, window=1000, concurrency=10)
+    ]
+
+    assert ids == [f"id{i:03d}" for i in range(5)]
+    assert [call["cursor"] for call in fake.calls] == [0, 2, 4]
+
+
+async def test_concurrency_short_page_discards_misaligned_batch_pages() -> None:
+    """A short page while rows remain invalidates the batch's later offsets.
+
+    Later pages in the same batch were fetched assuming the short page was
+    full, so they skip the rows the short page failed to deliver. The engine
+    must discard them and refetch from the corrected cursor: every row is
+    yielded exactly once, in order.
+    """
+    data = [_row(i, _ts_minutes(i)) for i in range(10)]
+    inner = FakeBubble(data)
+    truncated: list[int] = []
+
+    async def fetch(**kwargs: typing.Any) -> PageResult[dict[str, typing.Any]]:
+        page = await inner.fetch(**kwargs)
+        # serve the first fetch at cursor 2 one row short while rows remain,
+        # emulating a concurrent deletion shifting offsets mid-batch
+        if kwargs["cursor"] == 2 and not truncated:
+            truncated.append(kwargs["cursor"])
+            return PageResult(items=page.items[:1], cursor=page.cursor, remaining=page.remaining + 1)
+        return page
+
+    ids = [r["_id"] async for r in keyset_scan(fetch, keyset_field=_FIELD, page_size=2, window=1000, concurrency=3)]
+
+    assert ids == [f"id{i:03d}" for i in range(10)]
+    assert len(ids) == len(set(ids))
+    # the misaligned pages at cursors 4 and 6 were discarded; the refetch
+    # resumed from the corrected cursor 3
+    assert 3 in [call["cursor"] for call in inner.calls]
+
+
+async def test_concurrency_error_propagates_after_preceding_pages() -> None:
+    """A failed fetch raises only after the rows before it were yielded,
+    matching the prefix sequential fetching would have produced."""
+    data = [_row(i, _ts_minutes(i)) for i in range(10)]
+    inner = FakeBubble(data)
+
+    async def fetch(**kwargs: typing.Any) -> PageResult[dict[str, typing.Any]]:
+        if kwargs["cursor"] == 4:
+            msg = "boom"
+            raise RuntimeError(msg)
+        return await inner.fetch(**kwargs)
+
+    ids: list[str] = []
+    with pytest.raises(RuntimeError, match="boom"):
+        async for row in keyset_scan(fetch, keyset_field=_FIELD, page_size=2, window=1000, concurrency=3):
+            # a comprehension would discard the partial rows when the scan
+            # raises, and those are exactly what this test asserts on
+            ids.append(row["_id"])  # noqa: PERF401
+
+    # probe page (cursor 0) and the batch page before the failure (cursor 2)
+    assert ids == [f"id{i:03d}" for i in range(4)]
+
+
+async def test_concurrency_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="concurrency"):
+        _ = [r async for r in keyset_scan(FakeBubble([]).fetch, keyset_field=_FIELD, page_size=2, concurrency=0)]

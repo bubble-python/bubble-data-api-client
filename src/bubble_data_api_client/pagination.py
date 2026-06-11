@@ -22,10 +22,20 @@ Inherent limits:
     (~50,000) cannot be paged past: the seek cannot advance without skipping
     un-fetched rows at that value, and the cursor caps out within the bucket.
     Iteration stops short there, the same hard limit offset pagination hits.
+
+    Rows deleted while a scan runs can shift offsets between two fetches of
+    the same window without leaving a detectable trace (no page comes back
+    short), silently skipping a row. This is inherent to offset pagination
+    over live data and applies equally to sequential and concurrent fetching;
+    a seek re-anchors on the keyset value, so the exposure is bounded by one
+    window, not the whole scan. Inserts are safe with a creation-time keyset
+    field: new rows sort after the scan position and are picked up normally.
 """
 
 from __future__ import annotations
 
+import asyncio
+import math
 import typing
 from datetime import datetime
 
@@ -42,7 +52,13 @@ if typing.TYPE_CHECKING:
 # values get slow and approach Bubble's ~50,000 offset cap, so we reset to 0
 # with a greater-than constraint well before reaching it. kept high enough that
 # a single dense timestamp bucket is still paged through by offset between seeks.
-_DEFAULT_KEYSET_WINDOW: int = 1000
+_DEFAULT_KEYSET_WINDOW: typing.Final[int] = 1000
+
+# pages fetched in parallel per batch. 1 keeps scans strictly sequential, the
+# safe default for rate-limited plans; Bubble has been measured to serve at
+# least 20 concurrent page queries with near-linear throughput scaling, so
+# callers can raise this explicitly when they own the request budget.
+_DEFAULT_SCAN_CONCURRENCY: typing.Final[int] = 1
 
 
 class _PageFetch(typing.Protocol):
@@ -59,6 +75,41 @@ class _PageFetch(typing.Protocol):
     ) -> typing.Awaitable[PageResult[dict[str, typing.Any]]]: ...
 
 
+async def _fetch_batch(
+    fetch: _PageFetch,
+    *,
+    constraints: list[Constraint],
+    start_cursor: int,
+    count: int,
+    page_size: int,
+    sort_field: str,
+    additional_sort_fields: list[AdditionalSortField],
+) -> list[PageResult[dict[str, typing.Any]] | BaseException]:
+    """Fetch count pages at contiguous cursors, concurrently when count > 1.
+
+    Returns pages in cursor order. A failed concurrent fetch is returned in
+    place as the exception rather than raised, so the caller can process the
+    pages that precede it (matching what sequential fetching would have
+    yielded) before propagating the error; the single-page path raises
+    directly, which is equivalent because no preceding pages exist. All
+    fetches have completed by the time this returns, so no task is left in
+    flight if the caller's generator is closed.
+    """
+
+    def one(index: int) -> typing.Awaitable[PageResult[dict[str, typing.Any]]]:
+        return fetch(
+            constraints=constraints,
+            cursor=start_cursor + index * page_size,
+            limit=page_size,
+            sort_field=sort_field,
+            additional_sort_fields=additional_sort_fields,
+        )
+
+    if count == 1:
+        return [await one(0)]
+    return await asyncio.gather(*(one(i) for i in range(count)), return_exceptions=True)
+
+
 async def keyset_scan(
     fetch: _PageFetch,
     *,
@@ -66,13 +117,28 @@ async def keyset_scan(
     page_size: int,
     constraints: list[Constraint] | None = None,
     window: int = _DEFAULT_KEYSET_WINDOW,
+    concurrency: int = _DEFAULT_SCAN_CONCURRENCY,
 ) -> AsyncIterator[dict[str, typing.Any]]:
     """Yield every row matching constraints, ordered by keyset_field ascending.
 
     Pages by offset within a window, then seeks forward past the window with a
     greater-than constraint so the cursor never approaches Bubble's offset cap.
     Rows re-fetched by the seek overlap are deduplicated, so no row is yielded
-    twice. Memory is bounded by one timestamp bucket, not the full result set.
+    twice. Memory is bounded by one batch of pages plus one timestamp bucket,
+    not the full result set.
+
+    With concurrency > 1, pages at contiguous cursors are fetched in parallel
+    and processed in cursor order, so ordering and dedup behave exactly as in
+    the sequential case while throughput scales with concurrency (page latency
+    is dominated by Bubble's per-query time). The first page of a scan is
+    always fetched alone: its remaining count sizes every following batch, so
+    a scan never fans out into offsets known to be empty. If a page comes back
+    short while rows remain (a concurrent deletion shifted offsets), the rest
+    of its batch is discarded and refetched from the corrected cursor: the
+    detectable shift causes rows to be fetched twice rather than skipped, and
+    none are yielded twice. Deletions that shift offsets without shortening
+    any page are undetectable and can skip a row, sequentially or not; see
+    the module docstring.
 
     Args:
         fetch: Callback returning one PageResult for the given constraints,
@@ -81,12 +147,24 @@ async def keyset_scan(
             Values must be ISO 8601 strings parseable by datetime.fromisoformat.
         page_size: Rows requested per page (Bubble caps this at 100).
         constraints: Caller filters, preserved and combined with the seek bound.
-        window: Cursor offset at which to seek forward. Must be below Bubble's
-            ~50,000 offset cap.
+        window: Cursor offset at which to seek forward. The seek check runs
+            after each batch, so the cursor can overshoot the window by up to
+            concurrency * page_size; window plus that overshoot must stay
+            below Bubble's ~50,000 offset cap.
+        concurrency: Maximum pages fetched in parallel per batch. 1 preserves
+            strictly sequential fetching. Higher values multiply request rate
+            against Bubble, which may matter for rate-limited plans.
 
     Yields:
         Raw row dicts in ascending keyset_field order.
+
+    Raises:
+        ValueError: If concurrency is less than 1.
     """
+    if concurrency < 1:
+        msg = f"concurrency must be >= 1, got {concurrency}"
+        raise ValueError(msg)
+
     base: list[Constraint] = list(constraints) if constraints else []
     # the _id tiebreaker makes the order total and stable: Bubble's intra-tie
     # order can otherwise shift between requests, skipping or duplicating rows.
@@ -106,37 +184,60 @@ async def keyset_scan(
     # ids already yielded at value == last, the only rows a seek can re-return.
     # reset whenever last advances, so it never grows past one timestamp bucket.
     boundary_ids: set[str] = set()
+    # remaining reported by the last processed page, used only to size the next
+    # batch. None until the first page reports it, so a scan always starts with
+    # a single probe page. After a seek it slightly undercounts (the seek
+    # re-includes the boundary bucket), which only shrinks one batch.
+    remaining_hint: int | None = None
 
     while True:
-        page = await fetch(
+        batch_size: int = 1 if remaining_hint is None else min(concurrency, math.ceil(remaining_hint / page_size))
+        pages = await _fetch_batch(
+            fetch,
             constraints=boundary,
-            cursor=cursor,
-            limit=page_size,
+            start_cursor=cursor,
+            count=batch_size,
+            page_size=page_size,
             sort_field=keyset_field,
             additional_sort_fields=tiebreak,
         )
-        # an empty page ends iteration. past the offset cap Bubble returns no
-        # rows while still reporting remaining > 0, so this guard, not remaining,
-        # is what terminates a scan that hits the cap.
-        if not page.items:
-            return
 
-        for row in page.items:
-            row_id: str = row[BubbleField.ID]
-            if row_id in boundary_ids:
-                continue  # duplicate carried in by the seek overlap
-            value = datetime.fromisoformat(row[keyset_field])
-            if last is None or value > last:
-                second_last, last = last, value
-                boundary_ids = {row_id}
-            else:  # value == last, same bucket
-                boundary_ids.add(row_id)
-            yield row
+        for item in pages:
+            # a failed fetch propagates only after the pages before it were
+            # yielded, the same prefix sequential fetching would have produced.
+            if isinstance(item, BaseException):
+                raise item
+            page = item
+            # an empty page ends iteration. past the offset cap Bubble returns no
+            # rows while still reporting remaining > 0, so this guard, not remaining,
+            # is what terminates a scan that hits the cap.
+            if not page.items:
+                return
 
-        if page.remaining == 0:
-            return
+            for row in page.items:
+                row_id: str = row[BubbleField.ID]
+                if row_id in boundary_ids:
+                    continue  # duplicate carried in by the seek overlap
+                value = datetime.fromisoformat(row[keyset_field])
+                if last is None or value > last:
+                    second_last, last = last, value
+                    boundary_ids = {row_id}
+                else:  # value == last, same bucket
+                    boundary_ids.add(row_id)
+                yield row
 
-        cursor += len(page.items)
+            if page.remaining == 0:
+                return
+
+            remaining_hint = page.remaining
+            cursor += len(page.items)
+
+            # a short page while rows remain means later pages in this batch
+            # were fetched at offsets that assumed a full page and may skip
+            # rows. discard them and refetch from the corrected cursor: rows
+            # may be fetched twice, but none are skipped or yielded twice.
+            if len(page.items) < page_size:
+                break
 
         # seek forward only when it would advance past where the last seek left
         # off. two cases keep us paging by offset instead: second_last is None
