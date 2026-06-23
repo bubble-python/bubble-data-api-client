@@ -65,6 +65,7 @@ def test_bubble_field_returns_string_for_builtin_fields() -> None:
     assert created_alias == "Created Date"
     assert type(created_alias) is str
 
+    assert User.bubble_field("created_by") == "Created By"
     assert User.bubble_field("modified_date") == "Modified Date"
     assert User.bubble_field("slug") == "Slug"
 
@@ -120,6 +121,55 @@ async def test_save_uses_field_aliases(configured_client: None, httpx2_mock: res
     assert route.call_count == 1
     request_body = json.loads(route.calls[0].request.content)
     assert request_body == {"Buying company": "Acme Corp"}
+
+
+async def test_created_by_round_trips_on_read(configured_client: None, httpx2_mock: respx.Router) -> None:
+    """Verify the built-in "Created By" field is captured from API responses."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    httpx2_mock.get("https://example.com/user/abc123").respond(
+        200,
+        json={
+            "response": {
+                "_id": "abc123",
+                "name": "Test",
+                "Created By": "1671702337369x488321592367327900",
+                "Created Date": "2024-01-15T10:30:00.000Z",
+                "Modified Date": "2024-01-16T14:20:00.000Z",
+            }
+        },
+    )
+
+    user = await User.get(uid="abc123")
+
+    assert user is not None
+    assert user.created_by == "1671702337369x488321592367327900"
+
+
+async def test_save_excludes_created_by(configured_client: None, httpx2_mock: respx.Router) -> None:
+    """Verify save() never writes the read-only "Created By" field back to Bubble."""
+
+    class User(BubbleModel, typename="user"):
+        name: str
+
+    user = User.model_validate(
+        {
+            "_id": "abc123",
+            "name": "Test",
+            "Created By": "1671702337369x488321592367327900",
+        }
+    )
+    assert user.created_by == "1671702337369x488321592367327900"
+
+    route = httpx2_mock.patch("https://example.com/user/abc123").respond(204)
+
+    await user.save()
+
+    assert route.call_count == 1
+    request_body = json.loads(route.calls[0].request.content)
+    assert request_body == {"name": "Test"}
 
 
 async def test_update_serializes_datetime(configured_client: None, httpx2_mock: respx.Router) -> None:

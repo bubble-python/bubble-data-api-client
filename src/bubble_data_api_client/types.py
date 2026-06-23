@@ -14,6 +14,7 @@ class BubbleField(StrEnum):
     """Built-in Bubble field names."""
 
     ID = "_id"
+    CREATED_BY = "Created By"
     CREATED_DATE = "Created Date"
     MODIFIED_DATE = "Modified Date"
     SLUG = "Slug"
@@ -23,6 +24,7 @@ class BuiltinField(StrEnum):
     """Python ORM attribute names for Bubble's built-in fields."""
 
     UID = "uid"
+    CREATED_BY = "created_by"
     CREATED_DATE = "created_date"
     MODIFIED_DATE = "modified_date"
     SLUG = "slug"

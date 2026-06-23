@@ -65,6 +65,11 @@ class BubbleModel(PydanticBaseModel):
         alias=BubbleField.ID.value,
         description="Unique ID in format '{timestamp}x{random}' that identifies this record.",
     )
+    created_by: str | None = Field(
+        default=None,
+        alias=BubbleField.CREATED_BY.value,
+        description="Reference to the User who created this record. Empty when created without a logged-in user.",
+    )
     created_date: datetime | None = Field(
         default=None,
         alias=BubbleField.CREATED_DATE.value,
@@ -170,11 +175,11 @@ class BubbleModel(PydanticBaseModel):
     async def save(self) -> None:
         """Persist all field changes to Bubble.
 
-        Saves all model fields except uid and server-managed fields
-        (created_date, modified_date, slug).
+        Saves all model fields except uid and the read-only built-in fields
+        (created_by, created_date, modified_date, slug).
         """
         async with _get_client() as client:
-            # exclude uid and server-managed fields
+            # exclude uid and the read-only built-in fields
             data = self.model_dump(
                 mode="json",
                 exclude=BUILTIN_FIELDS,

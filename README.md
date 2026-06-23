@@ -96,7 +96,7 @@ order = Order(_id="123x456", customer="not-a-valid-uid")
 ### Bubble-specific handling
 
 The library handles Bubble's API quirks automatically:
-- **Field mapping**: Bubble's `_id` field maps to `uid` on your models
+- **Field mapping**: Bubble's `_id` field maps to `uid` on your models. Every model also inherits Bubble's other built-in fields automatically: `created_by`, `created_date`, `modified_date`, and `slug`. All are populated from API responses, and `save()` never writes any of them back: the dates are server-managed, `created_by` is set at creation, and the Data API rejects `slug` on update
 - **Response parsing**: Extracts data from Bubble's nested `{"response": {"results": [...]}}` structure
 - **Constraint format**: Builds the JSON constraint format Bubble expects
 
