@@ -60,7 +60,7 @@ _config_provider: ConfigProvider | None = None
 def configure(
     data_api_root_url: str,
     api_key: str,
-    retry: tenacity.AsyncRetrying | None | NotSetType = NOT_SET,
+    retry: tenacity.AsyncRetrying | NotSetType | None = NOT_SET,
 ) -> None:
     """Configure the Bubble Data API client with static values."""
     global _config_provider, _static_config
