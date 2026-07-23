@@ -103,7 +103,7 @@ class RawClient:
 
     async def __aexit__(
         self,
-        exc_type: type | None,
+        exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> None:
