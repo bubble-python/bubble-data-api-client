@@ -181,7 +181,7 @@ async def test_update_serializes_datetime(configured_client: None, httpx2_mock: 
 
     route = httpx2_mock.patch("https://example.com/event/abc123").respond(204)
 
-    await Event.update(uid="abc123", start_time=datetime(2026, 1, 15, 14, 30, 0))
+    await Event.update(uid="abc123", start_time=datetime.fromisoformat("2026-01-15T14:30:00"))  # naive on purpose
 
     assert route.call_count == 1
     request_body = json.loads(route.calls[0].request.content)
