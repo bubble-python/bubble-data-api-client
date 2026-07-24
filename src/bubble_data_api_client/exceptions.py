@@ -60,8 +60,9 @@ class BubbleAPIError(BubbleHttpError):
             body = data.get("body", {})
             status = body.get("status")
             message = body.get("message", response.text)
-        except Exception:  # noqa: S110
-            pass  # fall back to raw response text
+        except (ValueError, AttributeError):
+            # json/unicode decode errors or non-dict bodies: fall back to raw response text
+            pass
 
         return cls(
             status_code=response.status_code,
