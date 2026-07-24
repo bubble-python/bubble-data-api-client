@@ -31,9 +31,11 @@ user = await User.create(name="Ada", email="ada@example.com")
 user = await User.get(uid)
 
 # query (paginated)
-users = await User.find(constraints=[
-    constraint("status", ConstraintType.EQUALS, "active")
-])
+users = await User.find(
+    constraints=[
+        constraint("status", ConstraintType.EQUALS, "active"),
+    ]
+)
 
 # query all matching records
 all_users = await User.find_all()
@@ -54,9 +56,11 @@ if await User.exists(uid):
     print("User exists")
 
 # count
-active_count = await User.count(constraints=[
-    constraint("status", ConstraintType.EQUALS, "active")
-])
+active_count = await User.count(
+    constraints=[
+        constraint("status", ConstraintType.EQUALS, "active"),
+    ]
+)
 ```
 
 ### IDE support and type checking
@@ -69,9 +73,10 @@ class User(BubbleModel, typename="user"):
     email: str
     age: int
 
+
 user = await User.get(uid)
-user.name    # IDE autocomplete works
-user.nme     # Typo caught by pyright/mypy
+user.name  # IDE autocomplete works
+user.nme  # Typo caught by pyright/mypy
 ```
 
 Works with pyright, mypy, and IDE type checkers.
@@ -82,12 +87,19 @@ Pydantic validates data when models are created:
 
 ```python
 # Type mismatch caught immediately
-user = User(_id="123x456", name="Ada", email="ada@example.com", age="twenty-five")
+user = User(
+    _id="123x456",
+    name="Ada",
+    email="ada@example.com",
+    age="twenty-five",
+)
 # ValidationError: Input should be a valid integer
+
 
 # Invalid Bubble UID caught at the model level
 class Order(BubbleModel, typename="order"):
     customer: BubbleUID
+
 
 order = Order(_id="123x456", customer="not-a-valid-uid")
 # ValidationError: invalid Bubble UID format: not-a-valid-uid
@@ -157,11 +169,13 @@ Or use a dynamic provider for secrets management:
 import os
 from bubble_data_api_client import set_config_provider, BubbleConfig
 
+
 def get_config() -> BubbleConfig:
     return BubbleConfig(
         data_api_root_url=os.environ["BUBBLE_API_URL"],
         api_key=os.environ["BUBBLE_API_KEY"],
     )
+
 
 set_config_provider(get_config)
 ```
@@ -173,10 +187,12 @@ Define typed models with validation:
 ```python
 from bubble_data_api_client import BubbleModel, BubbleUID, OptionalBubbleUID
 
+
 class User(BubbleModel, typename="user"):
     name: str
     email: str
     company: OptionalBubbleUID = None  # linked Bubble record
+
 
 class Company(BubbleModel, typename="company"):
     name: str
@@ -195,15 +211,19 @@ user = await User.get("1234567890x1234567890")
 # query with constraints (single page)
 from bubble_data_api_client import constraint, ConstraintType
 
-active_users = await User.find(constraints=[
-    constraint("status", ConstraintType.EQUALS, "active"),
-    constraint("age", ConstraintType.GREATER_THAN, 18),
-])
+active_users = await User.find(
+    constraints=[
+        constraint("status", ConstraintType.EQUALS, "active"),
+        constraint("age", ConstraintType.GREATER_THAN, 18),
+    ]
+)
 
 # get all matching records as a list
-all_active = await User.find_all(constraints=[
-    constraint("status", ConstraintType.EQUALS, "active"),
-])
+all_active = await User.find_all(
+    constraints=[
+        constraint("status", ConstraintType.EQUALS, "active"),
+    ]
+)
 
 # iterate through all records with constant memory
 async for user in User.find_iter():
@@ -287,13 +307,15 @@ When a model declares `Field(alias=...)`, `bubble_field()` returns the Bubble fi
 ```python
 from pydantic import Field
 
+
 class User(BubbleModel, typename="user"):
     first_name: str | None = Field(default=None, alias="firstName")
     last_name: str | None = Field(default=None, alias="lastName")
 
-User.bubble_field("first_name")    # "firstName"
+
+User.bubble_field("first_name")  # "firstName"
 User.bubble_field("created_date")  # "Created Date"
-User.bubble_field("typo")          # raises UnknownFieldError
+User.bubble_field("typo")  # raises UnknownFieldError
 ```
 
 For fields without an alias, the Python attribute name is returned unchanged.
@@ -339,9 +361,11 @@ async for user in User.scan():
     await process(user)
 
 # filter with the same constraints as find()
-async for user in User.scan(constraints=[
-    constraint("status", ConstraintType.EQUALS, "active"),
-]):
+async for user in User.scan(
+    constraints=[
+        constraint("status", ConstraintType.EQUALS, "active"),
+    ]
+):
     await process(user)
 
 # fetch pages in parallel for higher throughput (default is 1, sequential)
@@ -363,20 +387,28 @@ Sequential scanning is bound by Bubble's per-page latency (often around one seco
 Validate Bubble record IDs at the type level:
 
 ```python
-from bubble_data_api_client import BubbleModel, BubbleUID, OptionalBubbleUID, OptionalBubbleUIDs
+from bubble_data_api_client import (
+    BubbleModel,
+    BubbleUID,
+    OptionalBubbleUID,
+    OptionalBubbleUIDs,
+)
+
 
 class Order(BubbleModel, typename="order"):
-    customer: BubbleUID                    # required, validated
-    referrer: OptionalBubbleUID = None     # optional, coerces invalid to None
-    items: OptionalBubbleUIDs = None       # list of UIDs, filters invalid
+    customer: BubbleUID  # required, validated
+    referrer: OptionalBubbleUID = None  # optional, coerces invalid to None
+    items: OptionalBubbleUIDs = None  # list of UIDs, filters invalid
+
 
 # validation helpers
 from bubble_data_api_client import is_bubble_uid, filter_bubble_uids
 
 is_bubble_uid("1234567890x1234567890")  # True
-is_bubble_uid("invalid")                 # False
+is_bubble_uid("invalid")  # False
 
-filter_bubble_uids(["1661531100253x688916634279608300", "invalid", None])  # ["1661531100253x688916634279608300"]
+uids = ["1661531100253x688916634279608300", "invalid", None]
+filter_bubble_uids(uids)  # ["1661531100253x688916634279608300"]
 ```
 
 ## Connection Pooling
@@ -424,13 +456,16 @@ This library is async-only, but you can use it in sync code:
 import asyncio
 from bubble_data_api_client import BubbleModel, constraint, ConstraintType
 
+
 class User(BubbleModel, typename="user"):
     name: str
     email: str
     early_access_enabled: bool = False
 
+
 # simple scripts
 user = asyncio.run(User.get("1234567890x1234567890"))
+
 
 # or wrap multiple operations
 async def main():
@@ -443,6 +478,7 @@ async def main():
         user.early_access_enabled = True
         await user.save()
 
+
 asyncio.run(main())
 ```
 
@@ -451,13 +487,13 @@ asyncio.run(main())
 ```python
 from bubble_data_api_client import OnMultiple
 from bubble_data_api_client.exceptions import (
-    BubbleError,              # base exception
-    BubbleHttpError,          # HTTP errors
+    BubbleError,  # base exception
+    BubbleHttpError,  # HTTP errors
     BubbleUnauthorizedError,  # 401/403 responses
-    MultipleMatchesError,     # create_or_update found duplicates (with on_multiple=ERROR)
-    PartialFailureError,      # some batch operations failed
-    InvalidBubbleUIDError,    # invalid UID format
-    ConfigurationError,       # missing configuration
+    MultipleMatchesError,  # create_or_update found duplicates (with on_multiple=ERROR)
+    PartialFailureError,  # some batch operations failed
+    InvalidBubbleUIDError,  # invalid UID format
+    ConfigurationError,  # missing configuration
 )
 
 # get() returns None if not found
