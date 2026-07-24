@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import threading
 import weakref
 from contextlib import asynccontextmanager
@@ -95,10 +96,9 @@ async def close_clients() -> None:
 
     for client in clients_to_close:
         if not client.is_closed:
-            try:
+            # best-effort cleanup, continue with remaining clients
+            with contextlib.suppress(Exception):
                 await client.aclose()
-            except Exception:  # noqa: S110
-                pass  # best-effort cleanup, continue with remaining clients
 
 
 @asynccontextmanager
@@ -128,32 +128,24 @@ def _atexit_cleanup() -> None:
     except RuntimeError:
         running_loop = None
 
-    try:
+    with contextlib.suppress(Exception):
         if running_loop is not None and running_loop.is_running():
             # edge case: event loop still running, schedule cleanup with timeout
             for client in clients_to_close:
                 if not client.is_closed:
-                    try:
+                    with contextlib.suppress(Exception):
                         future = asyncio.run_coroutine_threadsafe(client.aclose(), running_loop)
                         future.result(timeout=5.0)
-                    except Exception:  # noqa: S110
-                        pass
         else:
             # no running loop, create one and close all clients
             async def _close_all() -> None:
                 for client in clients_to_close:
                     if not client.is_closed:
-                        try:
+                        with contextlib.suppress(Exception):
                             await client.aclose()
-                        except Exception:  # noqa: S110
-                            pass
 
-            try:
+            with contextlib.suppress(Exception):
                 asyncio.run(_close_all())
-            except Exception:  # noqa: S110
-                pass
-    except Exception:  # noqa: S110
-        pass
 
 
 atexit.register(_atexit_cleanup)
