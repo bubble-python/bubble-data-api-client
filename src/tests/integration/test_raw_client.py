@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import httpx2
 import pytest
 
+from bubble_data_api_client.exceptions import BubbleAPIError
 from bubble_data_api_client.types import BubbleField
 
 if TYPE_CHECKING:
@@ -81,7 +82,7 @@ async def test_bulk_create_success(typename: str, bubble_raw_client: raw_client.
         for uid in created_ids:
             try:
                 await bubble_raw_client.delete(typename=typename, uid=uid)
-            except Exception as e:
+            except (BubbleAPIError, httpx2.HTTPError) as e:
                 warnings.warn(f"cleanup failed for {uid}: {e}", stacklevel=2)
 
 
@@ -112,7 +113,7 @@ async def test_bulk_create_parsed_success(typename: str, bubble_raw_client: raw_
         for uid in created_ids:
             try:
                 await bubble_raw_client.delete(typename=typename, uid=uid)
-            except Exception as e:
+            except (BubbleAPIError, httpx2.HTTPError) as e:
                 warnings.warn(f"cleanup failed for {uid}: {e}", stacklevel=2)
 
 
