@@ -15,10 +15,10 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, NotRequired, TypedDict
 
-if sys.version_info >= (3, 13):  # noqa: UP036
+if sys.version_info >= (3, 13):
     from typing import TypeIs
 else:
-    from typing_extensions import TypeIs  # noqa: UP035, TC002
+    from typing_extensions import TypeIs  # noqa: TC002
 
 if TYPE_CHECKING:
     import tenacity
