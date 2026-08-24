@@ -50,7 +50,6 @@ dependencies = [
     { name = "httpx2", extra = ["http2"] },
     { name = "pydantic" },
     { name = "tenacity" },
-    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -74,7 +73,6 @@ requires-dist = [
     { name = "httpx2", extras = ["http2"], specifier = "~=2.3" },
     { name = "pydantic", specifier = "~=2.12" },
     { name = "tenacity", specifier = "~=9.1" },
-    { name = "typing-extensions", specifier = ">=4.10" },
 ]
 
 [package.metadata.requires-dev]
