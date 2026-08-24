@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import httpx
@@ -12,7 +13,15 @@ if TYPE_CHECKING:
 
     import respx
 
-from bubble_data_api_client import BubbleAPIError, configure, http_client
+from bubble_data_api_client import (
+    BubbleAPIError,
+    BubbleCredentials,
+    configure,
+    http_client,
+    set_credentials_provider,
+    set_retry,
+)
+from bubble_data_api_client.config import BubbleConfig, set_config_provider
 from bubble_data_api_client.pool import close_clients
 from bubble_data_api_client.transport import Transport
 
@@ -101,3 +110,114 @@ async def test_transport_retry_exhausted(clean_client_pool: None, httpx2_mock: r
             await transport.get("/test")
 
     assert route.call_count == 3
+
+
+async def test_retry_lookup_does_not_touch_credentials(clean_client_pool: None, httpx2_mock: respx.Router) -> None:
+    """Retry resolves on its own slot, so a credentials provider runs once per operation."""
+    calls = 0
+
+    def credentials_provider() -> BubbleCredentials:
+        nonlocal calls
+        calls += 1
+        return BubbleCredentials(data_api_root_url="https://test.example.com", api_key="test-key")
+
+    set_credentials_provider(credentials_provider)
+    set_retry(
+        retry=tenacity.AsyncRetrying(
+            stop=tenacity.stop_after_attempt(3),
+            wait=tenacity.wait_none(),
+            retry=tenacity.retry_if_exception_type(BubbleAPIError),
+        )
+    )
+    try:
+        route = httpx2_mock.get("https://test.example.com/test").mock(
+            side_effect=[
+                httpx.Response(500),
+                httpx.Response(200, json={"result": "ok"}),
+                httpx.Response(200, json={"result": "ok"}),
+            ]
+        )
+
+        async with Transport() as transport:
+            await transport.get("/test")
+            await transport.get("/test")
+
+        assert route.call_count == 3
+        # one call for the pooled client, none for the requests or the retry lookups
+        assert calls == 1
+    finally:
+        configure(data_api_root_url="", api_key="")
+
+
+async def test_legacy_config_provider_costs_one_plus_one_per_request(
+    clean_client_pool: None, httpx2_mock: respx.Router
+) -> None:
+    """The deprecated single provider resolves both slots, so it runs 1 + N times."""
+    calls = 0
+
+    def config_provider() -> BubbleConfig:
+        nonlocal calls
+        calls += 1
+        return BubbleConfig(data_api_root_url="https://test.example.com", api_key="test-key", retry=None)
+
+    with pytest.warns(DeprecationWarning):
+        set_config_provider(config_provider)
+    try:
+        httpx2_mock.get("https://test.example.com/test").respond(200, json={"result": "ok"})
+
+        async with Transport() as transport:
+            await transport.get("/test")
+            await transport.get("/test")
+
+        # 1 for the pooled client on enter, then 1 per request for the retry policy
+        assert calls == 3
+    finally:
+        configure(data_api_root_url="", api_key="")
+
+
+class _AsyncWait(tenacity.wait.wait_base):
+    """A wait strategy that really suspends, so tenacity's iter() yields mid-attempt.
+
+    tenacity runs async strategies (see _utils.wrap_to_async_func) but types them
+    as sync, hence the override suppression.
+    """
+
+    async def __call__(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, retry_state: tenacity.RetryCallState
+    ) -> float:
+        await asyncio.sleep(0)
+        return 0.0
+
+
+async def test_concurrent_requests_share_one_retry_policy_safely(
+    clean_client_pool: None, httpx2_mock: respx.Router
+) -> None:
+    """One policy instance driving parallel requests must not lose retries.
+
+    tenacity keeps per-attempt state on the instance, so without a per-request
+    copy the gathered requests reset each other and return before retrying.
+    """
+    attempts: dict[str, int] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        which = request.url.params["i"]
+        attempts[which] = attempts.get(which, 0) + 1
+        return httpx.Response(200 if attempts[which] > 1 else 500, json={"result": which})
+
+    httpx2_mock.get(url__startswith="https://test.example.com/test").mock(side_effect=handler)
+
+    configure(
+        data_api_root_url="https://test.example.com",
+        api_key="test-key",
+        retry=tenacity.AsyncRetrying(
+            stop=tenacity.stop_after_attempt(2),
+            wait=_AsyncWait(),
+            retry=tenacity.retry_if_exception_type(BubbleAPIError),
+        ),
+    )
+
+    async with Transport() as transport:
+        responses = await asyncio.gather(*(transport.get("/test", params={"i": str(i)}) for i in range(8)))
+
+    assert [r.status_code for r in responses] == [200] * 8
+    assert sorted(attempts.values()) == [2] * 8

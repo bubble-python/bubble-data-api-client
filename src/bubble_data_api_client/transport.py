@@ -10,7 +10,7 @@ import httpx2
 if TYPE_CHECKING:
     import types
 
-from bubble_data_api_client.config import get_config
+from bubble_data_api_client.config import get_retry
 from bubble_data_api_client.exceptions import BubbleAPIError
 from bubble_data_api_client.pool import get_client
 
@@ -83,9 +83,12 @@ class Transport:
                 raise BubbleAPIError.from_response(response) from e
             return response
 
-        retry = get_config().get("retry")
+        retry = get_retry()
         if retry is not None:
-            return await retry(do_request)
+            # copy per request: tenacity keeps attempt state on the instance
+            # (BaseRetrying._local), so concurrent tasks sharing one policy reset each
+            # other and return None. tenacity.wraps() copies for the same reason.
+            return await retry.copy()(do_request)
         return await do_request()
 
     async def get(

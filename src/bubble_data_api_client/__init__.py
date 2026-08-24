@@ -14,9 +14,16 @@ from bubble_data_api_client.client.orm import BubbleModel
 from bubble_data_api_client.client.raw_client import RawClient
 from bubble_data_api_client.config import (
     BubbleConfig,
+    BubbleCredentials,
     ConfigProvider,
+    CredentialsProvider,
+    RetryProvider,
     configure,
     set_config_provider,
+    set_credentials,
+    set_credentials_provider,
+    set_retry,
+    set_retry_provider,
 )
 from bubble_data_api_client.constraints import (
     AdditionalSortField,
@@ -41,9 +48,16 @@ from bubble_data_api_client.validation import filter_bubble_uids, is_bubble_uid
 __all__ = [
     # config
     "BubbleConfig",
+    "BubbleCredentials",
     "ConfigProvider",
+    "CredentialsProvider",
+    "RetryProvider",
     "configure",
     "set_config_provider",
+    "set_credentials",
+    "set_credentials_provider",
+    "set_retry",
+    "set_retry_provider",
     # client classes
     "BubbleModel",
     "RawClient",

@@ -10,9 +10,9 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-from bubble_data_api_client import configure
+from bubble_data_api_client import BubbleCredentials, configure, set_credentials_provider
 from bubble_data_api_client.exceptions import ConfigurationError
-from bubble_data_api_client.pool import client_scope, close_clients, get_client
+from bubble_data_api_client.pool import _clients, client_scope, close_clients, get_client
 
 
 @pytest.fixture
@@ -70,3 +70,74 @@ def test_get_client_outside_async_context() -> None:
     client = get_client()
     assert isinstance(client, httpx2.AsyncClient)
     assert not client.is_closed
+
+
+async def test_credentials_provider_pools_per_tenant(clean_client_pool: None) -> None:
+    """Each set of credentials gets its own pooled client, and reuses it."""
+    tenant = "a"
+
+    def credentials_provider() -> BubbleCredentials:
+        return BubbleCredentials(data_api_root_url=f"https://{tenant}.example.com", api_key=f"key-{tenant}")
+
+    set_credentials_provider(credentials_provider)
+    try:
+        a1 = get_client()
+        a2 = get_client()
+        tenant = "b"
+        b1 = get_client()
+
+        assert a1 is a2
+        assert a1 is not b1
+        assert str(a1.base_url).startswith("https://a.example.com")
+        assert str(b1.base_url).startswith("https://b.example.com")
+        assert {
+            ("https://a.example.com", "key-a"),
+            ("https://b.example.com", "key-b"),
+        } <= set(_clients)
+
+        tenant = "a"
+        assert get_client() is a1
+    finally:
+        configure(data_api_root_url="", api_key="")
+
+
+async def test_close_clients_forgets_credentials(clean_client_pool: None) -> None:
+    """Pool keys hold api keys, so closing must not leave empty entries behind."""
+    configure(data_api_root_url="https://example.com", api_key="secret-key")
+    get_client()
+    assert ("https://example.com", "secret-key") in _clients
+
+    await close_clients()
+
+    assert _clients == {}
+
+
+async def test_failed_get_client_leaves_no_pool_entry(clean_client_pool: None) -> None:
+    """A rejected config must not pin its api key in the pool."""
+    configure(data_api_root_url="", api_key="secret-key")
+
+    with pytest.raises(ConfigurationError):
+        get_client()
+
+    assert _clients == {}
+
+
+async def test_close_clients_drops_entries_for_every_tenant(clean_client_pool: None) -> None:
+    """close_clients must clear the entry whichever tenant's credentials made it.
+
+    Only covers closed clients. A server that never calls close_clients() keeps
+    one client per tenant by design, see get_client.
+    """
+    tenant = "a"
+
+    def credentials_provider() -> BubbleCredentials:
+        return BubbleCredentials(data_api_root_url=f"https://{tenant}.example.com", api_key=f"key-{tenant}")
+
+    set_credentials_provider(credentials_provider)
+    try:
+        for tenant in ("a", "b", "c"):
+            get_client()
+            await close_clients()
+            assert _clients == {}, f"{tenant} left a pool entry behind"
+    finally:
+        configure(data_api_root_url="", api_key="")

@@ -15,69 +15,87 @@ if TYPE_CHECKING:
 
 import httpx2
 
-from bubble_data_api_client.config import BubbleConfig, get_config
+from bubble_data_api_client.config import BubbleCredentials, get_credentials
 from bubble_data_api_client.exceptions import ConfigurationError
 from bubble_data_api_client.http_client import httpx_client_factory
 
 # type aliases
-_ConfigKey = tuple[str, str]
+_CredentialsKey = tuple[str, str]
 _LoopClientMap = weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx2.AsyncClient]
 
-# global client pool: config_key → { loop → client }
-# WeakKeyDictionary auto-removes entries when the loop is garbage collected
-_clients: dict[_ConfigKey, _LoopClientMap] = {}
+# global client pool: credentials key → { loop → client }
+# WeakKeyDictionary auto-removes entries when the loop is garbage collected. The
+# outer key is not weak, see _drop_empty.
+_clients: dict[_CredentialsKey, _LoopClientMap] = {}
 _lock = threading.Lock()
 
 
-def _make_client_key(config: BubbleConfig) -> _ConfigKey:
-    """Generate a unique key for client pooling based on config."""
-    return (config["data_api_root_url"], config["api_key"])
+def _drop_empty() -> None:
+    """Forget pool keys with no live clients. Caller must hold _lock.
+
+    Keys hold credentials verbatim, so an entry outliving its clients would pin that
+    api key for the life of the process. An entry still serving a live client is kept,
+    rotated-away credentials included, until close_clients() or loop GC empties it.
+    """
+    for key in [key for key, loop_clients in _clients.items() if not len(loop_clients)]:
+        del _clients[key]
 
 
-def _create_client_from_config(config: BubbleConfig) -> httpx2.AsyncClient:
-    """Create a new httpx2 client from config."""
-    base_url = config["data_api_root_url"]
+def _make_client_key(credentials: BubbleCredentials) -> _CredentialsKey:
+    """Generate a unique key for client pooling based on credentials."""
+    return (credentials["data_api_root_url"], credentials["api_key"])
+
+
+def _create_client_from_credentials(credentials: BubbleCredentials) -> httpx2.AsyncClient:
+    """Create a new httpx2 client from credentials."""
+    base_url = credentials["data_api_root_url"]
     if not base_url:
         raise ConfigurationError("data_api_root_url")
-    api_key = config["api_key"]
+    api_key = credentials["api_key"]
     if not api_key:
         raise ConfigurationError("api_key")
     return httpx_client_factory(base_url=base_url, api_key=api_key)
 
 
 def get_client() -> httpx2.AsyncClient:
-    """Get or create a client for the current config and event loop. Thread-safe.
+    """Get or create a client for the current credentials and event loop. Thread-safe.
 
-    Each (config, event_loop) pair gets its own client. When an event loop is
-    garbage collected, its associated clients are automatically removed.
+    Each (credentials, event_loop) pair gets its own client, cached until
+    close_clients() runs on that loop or the loop is garbage collected. Nothing
+    evicts by age or count, so a process cycling through many credentials holds
+    one client per distinct set until then.
 
     If called outside an async context (no running loop), returns a fresh
     uncached client as a fallback.
     """
-    config = get_config()
+    credentials = get_credentials()
 
     try:
         current_loop = asyncio.get_running_loop()
     except RuntimeError:
         # no running loop - return uncached client
         # it will bind to whatever loop it's eventually used in
-        return _create_client_from_config(config)
+        return _create_client_from_credentials(credentials)
 
-    key = _make_client_key(config)
+    key = _make_client_key(credentials)
 
     with _lock:
-        if key not in _clients:
-            _clients[key] = weakref.WeakKeyDictionary()
-
-        loop_clients = _clients[key]
+        loop_clients = _clients.get(key)
 
         # return cached client if it exists and is still open
-        if current_loop in loop_clients and not loop_clients[current_loop].is_closed:
-            return loop_clients[current_loop]
+        if loop_clients is not None:
+            cached = loop_clients.get(current_loop)
+            if cached is not None and not cached.is_closed:
+                return cached
 
-        # create new client (either missing or was closed externally)
-        loop_clients[current_loop] = _create_client_from_config(config)
-        return loop_clients[current_loop]
+        # create first (it can raise), so bad credentials leave no key behind
+        client = _create_client_from_credentials(credentials)
+
+        if loop_clients is None:
+            _drop_empty()
+            loop_clients = _clients[key] = weakref.WeakKeyDictionary()
+        loop_clients[current_loop] = client
+        return client
 
 
 async def close_clients() -> None:
@@ -93,6 +111,7 @@ async def close_clients() -> None:
         clients_to_close: list[httpx2.AsyncClient] = [
             loop_clients.pop(current_loop) for loop_clients in _clients.values() if current_loop in loop_clients
         ]
+        _drop_empty()
 
     for client in clients_to_close:
         if not client.is_closed:
@@ -113,7 +132,7 @@ async def client_scope() -> AsyncIterator[None]:
 def _atexit_cleanup() -> None:
     """Best-effort cleanup of all clients at interpreter exit."""
     with _lock:
-        # collect all clients from all config/loop combinations
+        # collect all clients from all credentials/loop combinations
         clients_to_close: list[httpx2.AsyncClient] = []
         for loop_clients in _clients.values():
             clients_to_close.extend(loop_clients.values())

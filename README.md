@@ -20,6 +20,7 @@
 - Data migrations and bulk imports
 - Backend scripts and automation
 - Reporting that pulls from Bubble's database
+- Multi-tenant backends serving many Bubble apps
 
 ### Clean, simple interface
 
@@ -140,6 +141,7 @@ HTTP connections are pooled per event loop, avoiding reconnection overhead when 
 - **Unlimited scanning:** `scan()` streams collections of any size, past Bubble's ~50,000 record limit
 - **Upsert with duplicate handling:** `create_or_update` with configurable strategies
 - **Configurable retries:** plug in your own retry policy via `tenacity`
+- **Per-request credentials:** resolve credentials dynamically to serve many Bubble apps from one backend
 - **UID validation:** catch invalid Bubble IDs at the model level
 
 ## Installation
@@ -163,21 +165,55 @@ configure(
 )
 ```
 
-Or use a dynamic provider for secrets management:
+Or resolve credentials per request, for secrets managers and multi-tenant apps:
 
 ```python
 import os
-from bubble_data_api_client import set_config_provider, BubbleConfig
+from bubble_data_api_client import set_credentials_provider, BubbleCredentials
 
 
-def get_config() -> BubbleConfig:
-    return BubbleConfig(
+def credentials_from_env() -> BubbleCredentials:
+    return BubbleCredentials(
         data_api_root_url=os.environ["BUBBLE_API_URL"],
         api_key=os.environ["BUBBLE_API_KEY"],
     )
 
 
-set_config_provider(get_config)
+set_credentials_provider(credentials_from_env)
+```
+
+Providers run inline on the call path, so keep them cheap: a dict build or a
+`ContextVar` read, not a network call. Cache secrets yourself.
+
+Credentials and retry are set independently, so a per-tenant credentials provider
+can coexist with one shared retry policy. `configure()` sets both static values
+and clears any providers.
+
+| | static | dynamic |
+| --- | --- | --- |
+| credentials | `set_credentials()` | `set_credentials_provider()` |
+| retry | `set_retry()` | `set_retry_provider()` |
+
+A dynamic retry policy with static credentials, for example a different attempt
+count per tenant tier:
+
+```python
+from contextvars import ContextVar
+
+import tenacity
+from bubble_data_api_client import set_credentials, set_retry_provider
+
+tier: ContextVar[str] = ContextVar("tier", default="free")
+policies = {
+    "free": tenacity.AsyncRetrying(stop=tenacity.stop_after_attempt(2)),
+    "paid": tenacity.AsyncRetrying(stop=tenacity.stop_after_attempt(5)),
+}
+
+set_credentials(
+    data_api_root_url="https://your-app.bubbleapps.io/api/1.1/obj",
+    api_key="your-api-key",
+)
+set_retry_provider(lambda: policies[tier.get()])
 ```
 
 ### Using the ORM
@@ -426,6 +462,16 @@ async with client_scope():
 await close_clients()
 ```
 
+Clients are pooled per credentials, so a credentials provider picks the client when
+one is opened, and a retry provider is read per request. Each ORM call opens its own
+client, but a streaming one (`scan()`, `find_iter()`) holds it for the whole stream,
+as does a `RawClient` block for its whole `async with`. Switching tenants mid-block
+has no effect until you open a new one.
+
+A pooled client lives until `close_clients()` runs on its loop or the loop is
+garbage collected. Nothing evicts by age or count, so a process cycling through
+many sets of credentials holds one client per set.
+
 ## Retry Configuration
 
 Plug in custom retry policies using `tenacity`:
@@ -446,6 +492,14 @@ configure(
     api_key="your-api-key",
     retry=retry_policy,
 )
+```
+
+Or set the policy on its own, leaving credentials untouched:
+
+```python
+from bubble_data_api_client import set_retry
+
+set_retry(retry_policy)
 ```
 
 ## Usage in Sync Contexts
@@ -545,7 +599,7 @@ Yes, by wrapping calls in `asyncio.run()` or running an async block. See [Usage 
 
 ### How do I handle Bubble.io rate limits and retries?
 
-Pass a `tenacity.AsyncRetrying` policy to `configure(retry=...)`. You control the wait strategy, attempt count, and which exceptions to retry. See [Retry Configuration](#retry-configuration).
+Pass a `tenacity.AsyncRetrying` policy to `configure(retry=...)`, or set it on its own with `set_retry(...)`. You control the wait strategy, attempt count, and which exceptions to retry. See [Retry Configuration](#retry-configuration).
 
 ### What Python versions are supported?
 
