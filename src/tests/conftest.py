@@ -5,10 +5,17 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Iterator
 
-from bubble_data_api_client import configure
+from bubble_data_api_client import config, configure
 from bubble_data_api_client.pool import close_clients
+
+
+@pytest.fixture(autouse=True)
+def reset_config() -> Iterator[None]:
+    """Config lives in module globals and configure() merges, so restore defaults around every test."""
+    yield
+    config._reset()
 
 
 @pytest.fixture

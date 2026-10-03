@@ -133,7 +133,7 @@ HTTP connections are pooled per event loop, avoiding reconnection overhead when 
 
 ## Features
 
-- **Async-first:** built on `httpx` with HTTP/2
+- **Async-first:** built on `httpx`, with optional HTTP/2
 - **Pydantic ORM:** define models once, get validation and autocomplete
 - **Connection pooling:** automatic per-event-loop client reuse
 - **Rich query constraints:** pythonic filtering using Bubble's constraint system
@@ -169,7 +169,7 @@ Or resolve credentials per request, for secrets managers and multi-tenant apps:
 
 ```python
 import os
-from bubble_data_api_client import set_credentials_provider, BubbleCredentials
+from bubble_data_api_client import configure, BubbleCredentials
 
 
 def credentials_from_env() -> BubbleCredentials:
@@ -179,29 +179,32 @@ def credentials_from_env() -> BubbleCredentials:
     )
 
 
-set_credentials_provider(credentials_from_env)
+configure(credentials_provider=credentials_from_env)
 ```
 
 Providers run inline on the call path, so keep them cheap: a dict build or a
 `ContextVar` read, not a network call. Cache secrets yourself.
 
-Credentials and retry are set independently, so a per-tenant credentials provider
-can coexist with one shared retry policy. `configure()` sets both static values
-and clears any providers.
+Each `configure()` call changes only the options it is given, so you can call it
+more than once. Setting a static value clears the provider for the same slot, and
+the reverse. Passing both forms for one slot raises `TypeError`.
 
-| | static | dynamic |
+| option | static | dynamic |
 | --- | --- | --- |
-| credentials | `set_credentials()` | `set_credentials_provider()` |
-| retry | `set_retry()` | `set_retry_provider()` |
+| credentials | `data_api_root_url=`, `api_key=` | `credentials_provider=` |
+| retry | `retry=` | `retry_provider=` |
+| HTTP/2 | `http2=` | |
+| idle connection reuse | `keepalive_expiry=` | |
 
-A dynamic retry policy with static credentials, for example a different attempt
-count per tenant tier:
+Credentials and retry are independent, so a per-tenant credentials provider can
+coexist with one shared retry policy. A dynamic retry policy with static
+credentials, for example a different attempt count per tenant tier:
 
 ```python
 from contextvars import ContextVar
 
 import tenacity
-from bubble_data_api_client import set_credentials, set_retry_provider
+from bubble_data_api_client import configure
 
 tier: ContextVar[str] = ContextVar("tier", default="free")
 policies = {
@@ -209,12 +212,29 @@ policies = {
     "paid": tenacity.AsyncRetrying(stop=tenacity.stop_after_attempt(5)),
 }
 
-set_credentials(
+configure(
     data_api_root_url="https://your-app.bubbleapps.io/api/1.1/obj",
     api_key="your-api-key",
+    retry_provider=lambda: policies[tier.get()],
 )
-set_retry_provider(lambda: policies[tier.get()])
 ```
+
+HTTP/2 is off by default. Turn it on to multiplex concurrent requests over one
+connection:
+
+```python
+configure(http2=True)
+```
+
+`keepalive_expiry` is how many seconds an idle connection is kept for reuse, 5 by
+default:
+
+```python
+configure(keepalive_expiry=30.0)
+```
+
+`set_credentials()`, `set_credentials_provider()`, `set_retry()` and
+`set_retry_provider()` set one slot each.
 
 ### Using the ORM
 
@@ -462,15 +482,16 @@ async with client_scope():
 await close_clients()
 ```
 
-Clients are pooled per credentials, so a credentials provider picks the client when
-one is opened, and a retry provider is read per request. Each ORM call opens its own
+Clients are pooled per credentials, `http2` and `keepalive_expiry`, so a credentials
+provider or a change to either setting picks the client when one is opened, and a retry
+provider is read per request. Each ORM call opens its own
 client, but a streaming one (`scan()`, `find_iter()`) holds it for the whole stream,
-as does a `RawClient` block for its whole `async with`. Switching tenants mid-block
-has no effect until you open a new one.
+as does a `RawClient` block for its whole `async with`. Switching tenants or settings
+mid-block has no effect until you open a new one.
 
 A pooled client lives until `close_clients()` runs on its loop or the loop is
 garbage collected. Nothing evicts by age or count, so a process cycling through
-many sets of credentials holds one client per set.
+many credentials or settings holds one client per distinct combination.
 
 ## Retry Configuration
 
@@ -497,9 +518,7 @@ configure(
 Or set the policy on its own, leaving credentials untouched:
 
 ```python
-from bubble_data_api_client import set_retry
-
-set_retry(retry_policy)
+configure(retry=retry_policy)
 ```
 
 ## Usage in Sync Contexts
@@ -599,7 +618,7 @@ Yes, by wrapping calls in `asyncio.run()` or running an async block. See [Usage 
 
 ### How do I handle Bubble.io rate limits and retries?
 
-Pass a `tenacity.AsyncRetrying` policy to `configure(retry=...)`, or set it on its own with `set_retry(...)`. You control the wait strategy, attempt count, and which exceptions to retry. See [Retry Configuration](#retry-configuration).
+Pass a `tenacity.AsyncRetrying` policy to `configure(retry=...)`. It can go in the same call as your credentials or a later one. You control the wait strategy, attempt count, and which exceptions to retry. See [Retry Configuration](#retry-configuration).
 
 ### What Python versions are supported?
 

@@ -21,7 +21,6 @@ from bubble_data_api_client import (
     set_credentials_provider,
     set_retry,
 )
-from bubble_data_api_client.config import BubbleConfig, set_config_provider
 from bubble_data_api_client.pool import close_clients
 from bubble_data_api_client.transport import Transport
 
@@ -34,6 +33,18 @@ async def clean_client_pool() -> AsyncGenerator[None]:
     await close_clients()
 
 
+def test_httpx_client_factory_custom_keepalive_expiry(test_url: str, test_api_key: str) -> None:
+    client = http_client.httpx_client_factory(base_url=test_url, api_key=test_api_key, keepalive_expiry=30.0)
+    assert isinstance(client._transport, httpx2.AsyncHTTPTransport)
+    assert client._transport._pool._keepalive_expiry == 30.0
+
+
+def test_httpx_client_factory_http2_defaults_off(test_url: str, test_api_key: str) -> None:
+    client = http_client.httpx_client_factory(base_url=test_url, api_key=test_api_key)
+    assert isinstance(client._transport, httpx2.AsyncHTTPTransport)
+    assert client._transport._pool._http2 is False
+
+
 def test_httpx_client_factory(test_url: str, test_api_key: str) -> None:
     """Test that HTTP client is instantiated with correct configuration."""
     client = http_client.httpx_client_factory(
@@ -44,6 +55,20 @@ def test_httpx_client_factory(test_url: str, test_api_key: str) -> None:
     assert client.base_url == test_url
     assert client.headers["Authorization"] == f"Bearer {test_api_key}"
     assert client.headers["User-Agent"] == http_client.DEFAULT_USER_AGENT
+
+
+@pytest.mark.parametrize("http2", [False, True])
+def test_httpx_client_factory_pool_settings(test_url: str, test_api_key: str, http2: bool) -> None:
+    """Test that http2 and limits reach the pool."""
+    client = http_client.httpx_client_factory(base_url=test_url, api_key=test_api_key, http2=http2)
+    transport = client._transport
+    assert isinstance(transport, httpx2.AsyncHTTPTransport)
+    pool = transport._pool
+    assert pool._http1 is True
+    assert pool._http2 is http2
+    assert pool._max_connections == http_client.DEFAULT_MAX_CONNECTIONS
+    assert pool._max_keepalive_connections == http_client.DEFAULT_MAX_KEEPALIVE_CONNECTIONS
+    assert pool._keepalive_expiry == http_client.DEFAULT_KEEPALIVE_EXPIRY_SECONDS
 
 
 async def test_transport_no_retry_fails_immediately(clean_client_pool: None, httpx2_mock: respx.Router) -> None:
@@ -145,32 +170,6 @@ async def test_retry_lookup_does_not_touch_credentials(clean_client_pool: None, 
         assert route.call_count == 3
         # one call for the pooled client, none for the requests or the retry lookups
         assert calls == 1
-    finally:
-        configure(data_api_root_url="", api_key="")
-
-
-async def test_legacy_config_provider_costs_one_plus_one_per_request(
-    clean_client_pool: None, httpx2_mock: respx.Router
-) -> None:
-    """The deprecated single provider resolves both slots, so it runs 1 + N times."""
-    calls = 0
-
-    def config_provider() -> BubbleConfig:
-        nonlocal calls
-        calls += 1
-        return BubbleConfig(data_api_root_url="https://test.example.com", api_key="test-key", retry=None)
-
-    with pytest.warns(DeprecationWarning):
-        set_config_provider(config_provider)
-    try:
-        httpx2_mock.get("https://test.example.com/test").respond(200, json={"result": "ok"})
-
-        async with Transport() as transport:
-            await transport.get("/test")
-            await transport.get("/test")
-
-        # 1 for the pooled client on enter, then 1 per request for the retry policy
-        assert calls == 3
     finally:
         configure(data_api_root_url="", api_key="")
 

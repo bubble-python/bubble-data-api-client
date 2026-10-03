@@ -1,68 +1,116 @@
 """Configuration management for Bubble Data API credentials and settings.
 
-Two independent slots, each settable as a constant or as a provider function:
+configure() is the entry point. Each call changes only the options it is given:
 
-    # credentials (connection identity)
-    set_credentials(data_api_root_url="https://app.bubble.io/api/1.1/obj", api_key="...")
-    set_credentials_provider(lambda: credentials_for_current_tenant())
+    # credentials (connection identity), static or a provider
+    configure(data_api_root_url="https://app.bubble.io/api/1.1/obj", api_key="...")
+    configure(credentials_provider=lambda: credentials_for_current_tenant())
 
-    # retry policy (request behavior)
-    set_retry(tenacity.AsyncRetrying(...))
-    set_retry_provider(lambda: policy_for_current_tenant())
+    # retry policy (request behavior), static or a provider
+    configure(retry=tenacity.AsyncRetrying(...))
+    configure(retry_provider=lambda: policy_for_current_tenant())
 
-    # or set both static values at once
-    configure(data_api_root_url="...", api_key="...", retry=...)
+    # connection settings, apply to clients created afterwards
+    configure(http2=True, keepalive_expiry=30.0)
 
-They are kept apart because they have different lifetimes and different readers:
-credentials pick the pooled client (once per operation), retry is read per request.
-A provider is only called by the code path that actually needs its value.
+Credentials and retry are kept apart because they have different lifetimes and
+different readers: credentials pick the pooled client (once per operation), retry
+is read per request. A provider is only called by the code path that needs its value.
+The set_* functions set one slot at a time.
 """
 
 from __future__ import annotations
 
-import warnings
+import enum
 from collections.abc import Callable
-from typing import TYPE_CHECKING, NotRequired, TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+from bubble_data_api_client.http_client import DEFAULT_KEEPALIVE_EXPIRY_SECONDS
 
 if TYPE_CHECKING:
     import tenacity
 
 
 class BubbleCredentials(TypedDict):
-    """Connection identity. Also the client pool key, see pool._make_client_key."""
+    """Connection identity. Part of the client pool key, see pool._make_client_key."""
 
     data_api_root_url: str
     api_key: str
 
 
-class BubbleConfig(BubbleCredentials):
-    """Credentials plus retry policy. Only used by the deprecated config provider."""
-
-    retry: NotRequired[tenacity.AsyncRetrying | None]
-
-
 type CredentialsProvider = Callable[[], BubbleCredentials]
 type RetryProvider = Callable[[], tenacity.AsyncRetrying | None]
-type ConfigProvider = Callable[[], BubbleConfig]
 
 _credentials: BubbleCredentials = {"data_api_root_url": "", "api_key": ""}
 _credentials_provider: CredentialsProvider | None = None
 _retry: tenacity.AsyncRetrying | None = None
 _retry_provider: RetryProvider | None = None
+_http2: bool = False
+_keepalive_expiry: float = DEFAULT_KEEPALIVE_EXPIRY_SECONDS
+
+
+class _Unset(enum.Enum):
+    """Marks a configure() argument as not passed. None can't, it means "no retry"."""
+
+    UNSET = enum.auto()
 
 
 def configure(
-    data_api_root_url: str,
-    api_key: str,
-    retry: tenacity.AsyncRetrying | None = None,
+    data_api_root_url: str | _Unset = _Unset.UNSET,
+    api_key: str | _Unset = _Unset.UNSET,
+    retry: tenacity.AsyncRetrying | _Unset | None = _Unset.UNSET,
+    *,
+    credentials_provider: CredentialsProvider | _Unset = _Unset.UNSET,
+    retry_provider: RetryProvider | _Unset = _Unset.UNSET,
+    http2: bool | _Unset = _Unset.UNSET,
+    keepalive_expiry: float | _Unset = _Unset.UNSET,
 ) -> None:
-    """Set both slots to static values, clearing any providers.
+    """Set any mix of options. Omitted ones keep their current value.
 
-    Convenience for the common case. Set the slots separately when only one of
-    them is dynamic.
+    A static value clears the provider for the same slot and vice versa, as the
+    set_* functions do. http2 and keepalive_expiry (seconds an idle connection is
+    kept for reuse) are read when a pooled client is created, so they apply to
+    clients created after the call.
+
+    Raises:
+        TypeError: Only one of data_api_root_url and api_key was passed, or a
+            slot got both a static value and a provider.
     """
-    set_credentials(data_api_root_url=data_api_root_url, api_key=api_key)
-    set_retry(retry=retry)
+    global _http2, _keepalive_expiry
+    url_passed = not isinstance(data_api_root_url, _Unset)
+    key_passed = not isinstance(api_key, _Unset)
+    if url_passed != key_passed:
+        msg = "data_api_root_url and api_key must be passed together"
+        raise TypeError(msg)
+    if url_passed and not isinstance(credentials_provider, _Unset):
+        msg = "pass static credentials or credentials_provider, not both"
+        raise TypeError(msg)
+    if not isinstance(retry, _Unset) and not isinstance(retry_provider, _Unset):
+        msg = "pass retry or retry_provider, not both"
+        raise TypeError(msg)
+
+    # validated above, so a failed call leaves every slot untouched
+    if not isinstance(data_api_root_url, _Unset) and not isinstance(api_key, _Unset):
+        set_credentials(data_api_root_url=data_api_root_url, api_key=api_key)
+    if not isinstance(credentials_provider, _Unset):
+        set_credentials_provider(provider=credentials_provider)
+    if not isinstance(retry, _Unset):
+        set_retry(retry=retry)
+    if not isinstance(retry_provider, _Unset):
+        set_retry_provider(provider=retry_provider)
+    if not isinstance(http2, _Unset):
+        _http2 = http2
+    if not isinstance(keepalive_expiry, _Unset):
+        _keepalive_expiry = keepalive_expiry
+
+
+def _reset() -> None:
+    """Restore every option to its default. For tests."""
+    global _http2, _keepalive_expiry
+    set_credentials(data_api_root_url="", api_key="")
+    set_retry(retry=None)
+    _http2 = False
+    _keepalive_expiry = DEFAULT_KEEPALIVE_EXPIRY_SECONDS
 
 
 def set_credentials(data_api_root_url: str, api_key: str) -> None:
@@ -75,7 +123,7 @@ def set_credentials(data_api_root_url: str, api_key: str) -> None:
 def set_credentials_provider(provider: CredentialsProvider) -> None:
     """Set a provider for dynamic credentials, called once per operation.
 
-    Takes precedence over values set by configure(). Keep it cheap, a dict build
+    Takes precedence over static credentials. Keep it cheap, a dict build
     or a ContextVar read, not a network call.
     """
     global _credentials_provider
@@ -115,39 +163,11 @@ def get_retry() -> tenacity.AsyncRetrying | None:
     return _retry
 
 
-def set_config_provider(provider: ConfigProvider) -> None:
-    """Set one provider for both credentials and retry.
-
-    Deprecated: use set_credentials_provider plus set_retry or set_retry_provider.
-    Both slots resolve through it, so an operation of N requests calls it 1 + N
-    times: once for the pooled client, then once per request for the retry policy.
-
-    It fills both slots, so replacing only the credentials one later leaves retry
-    still resolving through this provider, which then runs per request in a
-    context it may no longer suit. Call set_retry too to finish migrating off it.
-    """
-    warnings.warn(
-        "set_config_provider is deprecated, use set_credentials_provider with set_retry or set_retry_provider instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    set_credentials_provider(provider)
-    set_retry_provider(lambda: provider().get("retry"))
+def get_http2() -> bool:
+    """Get whether new pooled clients use HTTP/2."""
+    return _http2
 
 
-def get_config() -> BubbleConfig:
-    """Get credentials and retry as one dict.
-
-    Deprecated: use get_credentials or get_retry so only the needed provider runs.
-    """
-    warnings.warn(
-        "get_config is deprecated, use get_credentials or get_retry instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    credentials = get_credentials()
-    return {
-        "data_api_root_url": credentials["data_api_root_url"],
-        "api_key": credentials["api_key"],
-        "retry": get_retry(),
-    }
+def get_keepalive_expiry() -> float:
+    """Get how long new pooled clients keep idle connections, in seconds."""
+    return _keepalive_expiry

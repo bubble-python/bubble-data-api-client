@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from bubble_data_api_client import BubbleCredentials, configure, set_credentials_provider
 from bubble_data_api_client.exceptions import ConfigurationError
+from bubble_data_api_client.http_client import DEFAULT_KEEPALIVE_EXPIRY_SECONDS
 from bubble_data_api_client.pool import _clients, client_scope, close_clients, get_client
 
 
@@ -91,8 +92,8 @@ async def test_credentials_provider_pools_per_tenant(clean_client_pool: None) ->
         assert str(a1.base_url).startswith("https://a.example.com")
         assert str(b1.base_url).startswith("https://b.example.com")
         assert {
-            ("https://a.example.com", "key-a"),
-            ("https://b.example.com", "key-b"),
+            ("https://a.example.com", "key-a", False, DEFAULT_KEEPALIVE_EXPIRY_SECONDS),
+            ("https://b.example.com", "key-b", False, DEFAULT_KEEPALIVE_EXPIRY_SECONDS),
         } <= set(_clients)
 
         tenant = "a"
@@ -105,7 +106,7 @@ async def test_close_clients_forgets_credentials(clean_client_pool: None) -> Non
     """Pool keys hold api keys, so closing must not leave empty entries behind."""
     configure(data_api_root_url="https://example.com", api_key="secret-key")
     get_client()
-    assert ("https://example.com", "secret-key") in _clients
+    assert ("https://example.com", "secret-key", False, DEFAULT_KEEPALIVE_EXPIRY_SECONDS) in _clients
 
     await close_clients()
 
@@ -141,3 +142,30 @@ async def test_close_clients_drops_entries_for_every_tenant(clean_client_pool: N
             assert _clients == {}, f"{tenant} left a pool entry behind"
     finally:
         configure(data_api_root_url="", api_key="")
+
+
+async def test_http2_change_gets_a_new_client(clean_client_pool: None) -> None:
+    """Pooled clients bake in http2, so changing it must not hand back an old client."""
+    configure(data_api_root_url="https://example.com", api_key="valid-key")
+    http1_client = get_client()
+
+    configure(http2=True)
+    http2_client = get_client()
+
+    assert http2_client is not http1_client
+    assert get_client() is http2_client
+    assert http2_client._transport._pool._http2 is True  # pyright: ignore[reportAttributeAccessIssue]
+    assert http1_client._transport._pool._http2 is False  # pyright: ignore[reportAttributeAccessIssue]
+
+
+async def test_keepalive_expiry_change_gets_a_new_client(clean_client_pool: None) -> None:
+    configure(data_api_root_url="https://example.com", api_key="valid-key")
+    default_client = get_client()
+
+    configure(keepalive_expiry=30.0)
+    custom_client = get_client()
+
+    assert custom_client is not default_client
+    assert get_client() is custom_client
+    assert custom_client._transport._pool._keepalive_expiry == 30.0  # pyright: ignore[reportAttributeAccessIssue]
+    assert default_client._transport._pool._keepalive_expiry == DEFAULT_KEEPALIVE_EXPIRY_SECONDS  # pyright: ignore[reportAttributeAccessIssue]

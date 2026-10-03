@@ -15,18 +15,18 @@ if TYPE_CHECKING:
 
 import httpx2
 
-from bubble_data_api_client.config import BubbleCredentials, get_credentials
+from bubble_data_api_client.config import BubbleCredentials, get_credentials, get_http2, get_keepalive_expiry
 from bubble_data_api_client.exceptions import ConfigurationError
 from bubble_data_api_client.http_client import httpx_client_factory
 
 # type aliases
-_CredentialsKey = tuple[str, str]
+_ClientKey = tuple[str, str, bool, float]
 _LoopClientMap = weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx2.AsyncClient]
 
-# global client pool: credentials key → { loop → client }
+# global client pool: client key → { loop → client }
 # WeakKeyDictionary auto-removes entries when the loop is garbage collected. The
 # outer key is not weak, see _drop_empty.
-_clients: dict[_CredentialsKey, _LoopClientMap] = {}
+_clients: dict[_ClientKey, _LoopClientMap] = {}
 _lock = threading.Lock()
 
 
@@ -41,12 +41,12 @@ def _drop_empty() -> None:
         del _clients[key]
 
 
-def _make_client_key(credentials: BubbleCredentials) -> _CredentialsKey:
-    """Generate a unique key for client pooling based on credentials."""
-    return (credentials["data_api_root_url"], credentials["api_key"])
+def _make_client_key(credentials: BubbleCredentials, http2: bool, keepalive_expiry: float) -> _ClientKey:
+    """Build the pool key for a client."""
+    return (credentials["data_api_root_url"], credentials["api_key"], http2, keepalive_expiry)
 
 
-def _create_client_from_credentials(credentials: BubbleCredentials) -> httpx2.AsyncClient:
+def _create_client(credentials: BubbleCredentials, http2: bool, keepalive_expiry: float) -> httpx2.AsyncClient:
     """Create a new httpx2 client from credentials."""
     base_url = credentials["data_api_root_url"]
     if not base_url:
@@ -54,13 +54,13 @@ def _create_client_from_credentials(credentials: BubbleCredentials) -> httpx2.As
     api_key = credentials["api_key"]
     if not api_key:
         raise ConfigurationError("api_key")
-    return httpx_client_factory(base_url=base_url, api_key=api_key)
+    return httpx_client_factory(base_url=base_url, api_key=api_key, http2=http2, keepalive_expiry=keepalive_expiry)
 
 
 def get_client() -> httpx2.AsyncClient:
     """Get or create a client for the current credentials and event loop. Thread-safe.
 
-    Each (credentials, event_loop) pair gets its own client, cached until
+    Each (credentials, http2, keepalive_expiry, event_loop) combination gets its own client, cached until
     close_clients() runs on that loop or the loop is garbage collected. Nothing
     evicts by age or count, so a process cycling through many credentials holds
     one client per distinct set until then.
@@ -69,15 +69,17 @@ def get_client() -> httpx2.AsyncClient:
     uncached client as a fallback.
     """
     credentials = get_credentials()
+    http2 = get_http2()
+    keepalive_expiry = get_keepalive_expiry()
 
     try:
         current_loop = asyncio.get_running_loop()
     except RuntimeError:
         # no running loop - return uncached client
         # it will bind to whatever loop it's eventually used in
-        return _create_client_from_credentials(credentials)
+        return _create_client(credentials=credentials, http2=http2, keepalive_expiry=keepalive_expiry)
 
-    key = _make_client_key(credentials)
+    key = _make_client_key(credentials=credentials, http2=http2, keepalive_expiry=keepalive_expiry)
 
     with _lock:
         loop_clients = _clients.get(key)
@@ -89,7 +91,7 @@ def get_client() -> httpx2.AsyncClient:
                 return cached
 
         # create first (it can raise), so bad credentials leave no key behind
-        client = _create_client_from_credentials(credentials)
+        client = _create_client(credentials=credentials, http2=http2, keepalive_expiry=keepalive_expiry)
 
         if loop_clients is None:
             _drop_empty()

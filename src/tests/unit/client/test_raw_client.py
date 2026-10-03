@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     import respx
 
 
-async def test_raw_client_init() -> None:
+async def test_raw_client_init(configured_client: None) -> None:
     """Test that RawClient can be instantiated and used as context manager."""
     # test creating an instance
     client = raw_client.RawClient()
